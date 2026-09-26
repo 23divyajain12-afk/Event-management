@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users, QrCode, BarChart2, LogOut, Menu, X, FileJson, Award, Ticket, BookOpen, ChevronDown, ChevronUp } from "lucide-react";
+import { Users, QrCode, BarChart2, LogOut, Menu, X, FileJson, Award, Ticket, BookOpen, ChevronDown, ChevronUp, Mail } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/hooks/useAuth";
 
@@ -14,6 +14,7 @@ const navItems = [
   { label: "Convert to JSON", icon: FileJson, href: "/convert-data" },
   { label: "Add Participant", icon: Users, href: "/add-participant" },
   { label: "Send Tickets", icon: Ticket, href: "/send-tickets" },
+  { label: "Send Email", icon: Mail, href: "/send-email" },
   { label: "Total Attendance", icon: BarChart2, href: "/attendance" },
   { label: "Send Certificates", icon: Award, href: "/certificates" },
 ];
@@ -125,6 +126,22 @@ JIDNYESH TOKE,,jidnyesh@gmail.com,DAY2,Event A`,
       "Step 4: Customize the email subject and body.",
       "Step 5: Review and click Send Certificates.",
       "Each person receives the certificate only once per event (duplicate prevention).",
+    ],
+  },
+  {
+    step: "07",
+    title: "Send Broadcast Emails",
+    href: "/send-email",
+    color: "bg-teal-500",
+    description: "Send personalized announcements, schedules, or updates to all registered participants or selected filter groups.",
+    steps: [
+      "Go to Send Email from the sidebar.",
+      "Step 1: Filter target recipients by Ticket Type (ALL / DAY1 / DAY2 / COMBO) and Event, or add manual extra emails.",
+      "Step 2: Check the live recipient count and click 'Preview List' to view matching recipients.",
+      "Step 3: Choose a template preset or compose your custom subject and email message.",
+      "Step 4: Use variable tags like {name}, {event}, and {ticketType} to personalize content.",
+      "Step 5: Optionally attach files (PDF, schedule images, guidelines).",
+      "Step 6: Review the live sample preview and click 'Send Broadcast' to initiate live streamed delivery.",
     ],
   },
 ];

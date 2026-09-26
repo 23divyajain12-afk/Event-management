@@ -24,6 +24,8 @@ A **Next.js** web application to manage event attendance using QR codes. Handles
 npm install
 ```
 
+For Brevo SMTP, set `SMTP_HOST=smtp-relay.brevo.com`, `SMTP_PORT=587`, and use the Brevo account login email as `SMTP_USER`, the verified sender as `EMAIL`, and the generated SMTP key as `EMAIL_PASSWORD`.
+
 ### 2. Environment Variables
 
 Create a `.env` file in the root (or copy from `.env.example`):
@@ -96,6 +98,7 @@ After this, login at [http://localhost:3000/login](http://localhost:3000/login) 
 | `/convert-data` | Admin | Convert CSV/Excel to JSON |
 | `/add-participant` | Admin | Bulk insert participants, delete collections |
 | `/send-tickets` | Admin | Send event tickets with QR codes via email |
+| `/send-email` | Admin | Bulk participant email campaigns with Excel validation, personalization, and retry support |
 | `/attendance` | Admin | View, filter, and export attendance records |
 | `/certificates` | Admin | Send personalized certificates via email |
 

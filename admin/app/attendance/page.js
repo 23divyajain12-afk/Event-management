@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users, QrCode, BarChart2, LogOut, Menu, X, FileJson, RefreshCw, Download, Award, Ticket, BookOpen } from "lucide-react";
+import { Users, QrCode, BarChart2, LogOut, Menu, X, FileJson, RefreshCw, Download, Award, Ticket, BookOpen, Mail } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Tooltip from "@/components/Tooltip";
 import { useAuth } from "@/lib/hooks/useAuth";
@@ -18,6 +18,7 @@ const navItems = [
   { label: "Convert to JSON", icon: FileJson, href: "/convert-data" },
   { label: "Add Participant", icon: Users, href: "/add-participant" },
   { label: "Send Tickets", icon: Ticket, href: "/send-tickets" },
+  { label: "Send Email", icon: Mail, href: "/send-email" },
   { label: "Total Attendance", icon: BarChart2, href: "/attendance" },
   { label: "Send Certificates", icon: Award, href: "/certificates" },
 ];

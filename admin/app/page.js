@@ -1,122 +1,19 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import QrScanner from "@/components/QrScanner";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { X } from "lucide-react";
-import { cn } from "@/lib/utils";
-import Tooltip from "@/components/Tooltip";
 
-export default function AdminPage() {
+export default function RootPage() {
   const router = useRouter();
-  const [selectedEvent, setSelectedEvent] = useState("");
-  const [scannerActive, setScannerActive] = useState(false);
-  const [scanResult, setScanResult] = useState(null);
-  const [alert, setAlert] = useState(null);
 
-  const handleScan = useCallback(
-    async (data) => {
-      if (data) {
-        setScanResult(data);
-        try {
-          const response = await fetch("/api/mark-attendance", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ userId: data, eventName: selectedEvent }),
-          });
-          const result = await response.json();
-          setAlert({
-            type: response.ok ? "success" : "error",
-            message: result.message,
-          });
-        } catch (error) {
-          console.error("Error marking attendance:", error);
-          setAlert({ type: "error", message: "Error marking attendance" });
-        }
-      }
-    },
-    [selectedEvent]
-  );
+  useEffect(() => {
+    router.replace("/send-email");
+  }, [router]);
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Navbar */}
-      <nav className="border-b border-border bg-card px-6 py-3 flex items-center justify-between">
-        <span className="font-semibold text-sm tracking-tight">Abhivriddhi</span>
-        <Button variant="outline" size="sm" onClick={() => router.push("/login")}>
-          Login
-        </Button>
-      </nav>
-
-      {/* Main Content */}
-      <div className="container mx-auto p-4">
-        <Card>
-          <CardHeader>
-            <CardTitle>Event Attendance System</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                <Select onValueChange={(value) => setSelectedEvent(value)}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select event" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Event A">Event A</SelectItem>
-                    <SelectItem value="Event B">Event B</SelectItem>
-                    <SelectItem value="Event C">Event C</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Tooltip text="Select the event you want to mark attendance for before starting the scanner." />
-              </div>
-              <div className="flex items-center gap-2">
-                <Button onClick={() => setScannerActive(!scannerActive)}>
-                  {scannerActive ? "Stop Scanner" : "Start Scanner"}
-                </Button>
-                <Tooltip text={scannerActive ? "Click to stop the camera scanner." : "Click to activate the camera and start scanning participant QR codes. Make sure an event is selected first."} />
-              </div>
-              {scanResult && <p>Last scanned: {scanResult}</p>}
-              {alert && (
-                <Alert
-                  variant={alert.type === "success" ? "default" : "destructive"}
-                  className={cn("flex justify-between items-center", {
-                    "text-green-500 border-green-600": alert.type === "success",
-                  })}
-                >
-                  <div>
-                    <AlertTitle>
-                      {alert.type === "success" ? "Success" : "Error"}
-                    </AlertTitle>
-                    <AlertDescription>{alert.message}</AlertDescription>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    onClick={() => setAlert(null)}
-                    className="ml-4"
-                    size="icon"
-                  >
-                    <X />
-                  </Button>
-                </Alert>
-              )}
-              {scannerActive && selectedEvent && (
-                <QrScanner onScan={handleScan} />
-              )}
-            </div>
-          </CardContent>
-        </Card>
+    <div className="min-h-screen flex items-center justify-center bg-background text-foreground">
+      <div className="text-sm text-muted-foreground animate-pulse">
+        Loading Abhivriddhi Participant Email System...
       </div>
     </div>
   );

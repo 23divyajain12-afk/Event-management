@@ -261,6 +261,11 @@ const CopyIco = () => (
     <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
   </svg>
 );
+const MsgIco = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
+  </svg>
+);
 const ChevIco = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <polyline points="6 9 12 15 18 9"/>
@@ -304,9 +309,16 @@ function useCopy() {
 }
 
 const CONTACTS = [
-  { name: 'Shivam Ghodake',      phone: '+91 95796 54986' },
-  { name: 'Aakanksha Bhusewar',  phone: '+91 788 805 0888' },
-  { name: 'Adarsh Khare',     phone: '+91 70581 51744' },
+  { name: 'Shivam Ghodake',      phone: '+91 95796 54986', role: 'Lead Coordinator' },
+  { name: 'Aakanksha Bhusewar',  phone: '+91 788 805 0888', role: 'Event Coordinator' },
+  { name: 'Adarsh Khare',        phone: '+91 70581 51744', role: 'Technical Coordinator' },
+];
+
+const RECIPIENT_OPTIONS = [
+  { label: 'Abhivriddhi Team (General Inquiries)', email: 'abhivriddhi@vit.edu' },
+  { label: 'Shivam Ghodake (Lead Coordinator)', phone: '+91 95796 54986' },
+  { label: 'Aakanksha Bhusewar (Event Coordinator)', phone: '+91 788 805 0888' },
+  { label: 'Adarsh Khare (Technical Coordinator)', phone: '+91 70581 51744' },
 ];
 
 const FAQS = [
@@ -325,13 +337,25 @@ const SOCIALS = [
 export default function Contact() {
   const refs = useRef([]);
   const formRef = useRef(null);
-  const [form, setForm] = useState({ name: '', email: '', subject: '', message: '' });
+  const [form, setForm] = useState({
+    name: '',
+    email: '',
+    recipient: 'Abhivriddhi Team (General Inquiries)',
+    subject: '',
+    message: ''
+  });
   const [errors, setErrors] = useState({});
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
+  const [submitError, setSubmitError] = useState('');
   const [openFaq, setOpenFaq] = useState(null);
   const [showFab, setShowFab] = useState(false);
   const { copied, copy } = useCopy();
+
+  const handleSelectContact = (recipientLabel) => {
+    setForm(f => ({ ...f, recipient: recipientLabel }));
+    formRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
 
   useEffect(() => {
     const obs = new IntersectionObserver((entries) => {
@@ -359,11 +383,33 @@ export default function Contact() {
     return e;
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const e = validate();
     if (Object.keys(e).length) { setErrors(e); return; }
     setSending(true);
-    setTimeout(() => { setSending(false); setSent(true); }, 1600);
+    setSubmitError('');
+    try {
+      const res = await fetch('/api/contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setSent(true);
+      } else {
+        // Server returned validation errors or a message
+        if (data.errors) {
+          setErrors(data.errors);
+        } else {
+          setSubmitError(data.error || 'Something went wrong. Please try again.');
+        }
+      }
+    } catch {
+      setSubmitError('Network error — please check your connection and try again.');
+    } finally {
+      setSending(false);
+    }
   };
 
   const upd = (k, v) => { setForm(f => ({ ...f, [k]: v })); setErrors(e => ({ ...e, [k]: '' })); };
@@ -399,12 +445,37 @@ export default function Contact() {
             <h3 className="c-card-title">Phone Numbers</h3>
           </div>
           <div className="c-phone-grid">
-            {CONTACTS.map(({ name, phone }) => (
+            {CONTACTS.map(({ name, phone, role }) => (
               <div key={name} className="c-person">
-                <div className="c-pname">{name}</div>
+                <div
+                  className="c-pname"
+                  style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                  onClick={() => handleSelectContact(`${name} (${role})`)}
+                  title={`Click to send message to ${name}`}
+                >
+                  <span style={{ color: 'var(--text)' }}>{name}</span>
+                  <span style={{ fontSize: '0.68rem', color: 'var(--accent)', opacity: 0.8 }}>· {role}</span>
+                </div>
                 <div className="c-prow">
                   <a href={`tel:${phone.replace(/\s/g,'')}`} className="c-pphone">{phone}</a>
-                  <button className="c-copybtn" onClick={() => copy(phone, phone)} title="Copy">
+                  <a
+                    href={`https://wa.me/${phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent("Hello " + name + ", I am reaching out from the Abhivriddhi website.")}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="c-copybtn"
+                    title={`Message ${name} on WhatsApp`}
+                    style={{ textDecoration: 'none' }}
+                  >
+                    <MsgIco />
+                  </a>
+                  <button
+                    className="c-copybtn"
+                    onClick={() => handleSelectContact(`${name} (${role})`)}
+                    title={`Send inquiry to ${name} in form below`}
+                  >
+                    <Ico d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+                  </button>
+                  <button className="c-copybtn" onClick={() => copy(phone, phone)} title="Copy Phone Number">
                     <CopyIco />
                   </button>
                   <span className={`c-toast ${copied === phone ? 'on' : ''}`}>Copied!</span>
@@ -487,10 +558,40 @@ export default function Contact() {
             <div className="c-success">
               <div className="c-success-ico"><CheckIco /></div>
               <h3>Thank <em>You</em></h3>
-              <p>We'll get back to you within 24 hours.</p>
+              <p style={{ fontSize: '0.95rem', marginBottom: '8px' }}>
+                Your message has been sent to <strong style={{ color: 'var(--accent)' }}>{form.recipient}</strong>.
+              </p>
+              <p style={{ fontSize: '0.82rem', color: 'rgba(255,255,255,0.6)' }}>
+                A confirmation has been sent to <strong>{form.email}</strong>. We'll respond within 24 hours.
+              </p>
+              <button
+                className="c-btn"
+                style={{ marginTop: '20px', padding: '9px 20px', fontSize: '0.82rem' }}
+                onClick={() => {
+                  setSent(false);
+                  setForm(f => ({ ...f, subject: '', message: '' }));
+                }}
+              >
+                Send Another Message
+              </button>
             </div>
           ) : (
             <div>
+              <div className="c-fg">
+                <label className="c-fl">Recipient / Direct Inquiry To</label>
+                <select
+                  className="c-fi"
+                  value={form.recipient}
+                  onChange={e => upd('recipient', e.target.value)}
+                  style={{ cursor: 'pointer', background: 'rgba(255,255,255,0.04)', color: '#ffffff' }}
+                >
+                  {RECIPIENT_OPTIONS.map(opt => (
+                    <option key={opt.label} value={opt.label} style={{ background: '#0a0d0f', color: '#fff' }}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <div className="c-f2" style={{ marginBottom: '14px' }}>
                 <div className="c-fg" style={{ marginBottom: 0 }}>
                   <label className="c-fl">Name</label>
@@ -516,6 +617,11 @@ export default function Contact() {
               <button className="c-btn" onClick={handleSubmit} disabled={sending}>
                 {sending ? <><span className="c-spin" /> Sending…</> : <>Send Message →</>}
               </button>
+              {submitError && (
+                <div style={{ marginTop: '12px', padding: '10px 14px', borderRadius: '8px', background: 'rgba(220,100,100,0.08)', border: '1px solid rgba(220,100,100,0.3)', color: '#d07070', fontSize: '0.82rem', lineHeight: 1.6 }}>
+                  {submitError}
+                </div>
+              )}
             </div>
           )}
         </div>

@@ -15,6 +15,7 @@ const navItems = [
   { label: "Convert to JSON", icon: FileJson, href: "/convert-data" },
   { label: "Add Participant", icon: Users, href: "/add-participant" },
   { label: "Send Tickets", icon: Ticket, href: "/send-tickets" },
+  { label: "Send Email", icon: Mail, href: "/send-email" },
   { label: "Total Attendance", icon: BarChart2, href: "/attendance" },
   { label: "Send Certificates", icon: Award, href: "/certificates" },
 ];
