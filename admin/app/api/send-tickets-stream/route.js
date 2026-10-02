@@ -3,6 +3,7 @@ import dbConnect from "@/lib/dbConnect";
 import User from "@/lib/models/User";
 import nodemailer from "nodemailer";
 import sharp from "sharp";
+import { requireAdmin } from "@/lib/auth";
 
 async function generateQRBuffer(qrData, size) {
   const url = `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(qrData)}`;
@@ -12,6 +13,8 @@ async function generateQRBuffer(qrData, size) {
 }
 
 export async function POST(req) {
+  const { response } = requireAdmin(req);
+  if (response) return response;
   await dbConnect();
 
   const formData = await req.formData();

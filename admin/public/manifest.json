@@ -1,0 +1,8 @@
+{
+  "name": "Abhivriddhi Ticket Scanner",
+  "short_name": "Ticket Scanner",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f0f1a",
+  "theme_color": "#1a1a2e"
+}

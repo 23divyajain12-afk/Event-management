@@ -3,6 +3,7 @@ import dbConnect from "@/lib/dbConnect";
 import User from "@/lib/models/User";
 import nodemailer from "nodemailer";
 import sharp from "sharp";
+import { requireAdmin } from "@/lib/auth";
 
 // Fetch QR code image as buffer from qrserver API
 async function generateQRBuffer(qrData, size) {
@@ -13,6 +14,8 @@ async function generateQRBuffer(qrData, size) {
 }
 
 export async function POST(req) {
+  const { response } = requireAdmin(req);
+  if (response) return response;
   await dbConnect();
 
   try {

@@ -5,6 +5,7 @@ import AttendanceDAY1 from "@/lib/models/AttendanceDAY1";
 import AttendanceDAY2 from "@/lib/models/AttendanceDAY2";
 import AttendanceCOMBO from "@/lib/models/AttendanceCOMBO";
 import CertificateSent from "@/lib/models/CertificateSent";
+import { requireAdmin } from "@/lib/auth";
 
 const modelMap = {
   users: User,
@@ -15,6 +16,8 @@ const modelMap = {
 };
 
 export async function POST(req) {
+  const { response } = requireAdmin(req);
+  if (response) return response;
   await dbConnect();
 
   const { collection } = await req.json();

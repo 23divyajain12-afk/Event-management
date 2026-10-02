@@ -1,20 +1,10 @@
-"use client";
+import ScannerPanel from "@/components/ScannerPanel";
 
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+export const metadata = {
+  title: "Ticket Scanner | Abhivriddhi",
+  manifest: "/manifest.json",
+};
 
-export default function RootPage() {
-  const router = useRouter();
-
-  useEffect(() => {
-    router.replace("/send-email");
-  }, [router]);
-
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-background text-foreground">
-      <div className="text-sm text-muted-foreground animate-pulse">
-        Loading Abhivriddhi Participant Email System...
-      </div>
-    </div>
-  );
+export default function ScannerPage() {
+  return <ScannerPanel />;
 }

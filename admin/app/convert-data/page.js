@@ -10,6 +10,7 @@ import { useAuth } from "@/lib/hooks/useAuth";
 
 const navItems = [
   { label: "Guidelines", icon: BookOpen, href: "/guidelines" },
+  { label: "Events & Templates", icon: BookOpen, href: "/events" },
   { label: "Scan Attendance", icon: QrCode, href: "/" },
   { label: "Convert to JSON", icon: FileJson, href: "/convert-data" },
   { label: "Add Participant", icon: Users, href: "/add-participant" },

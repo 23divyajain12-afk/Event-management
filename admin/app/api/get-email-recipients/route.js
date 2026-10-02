@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
 import dbConnect from "@/lib/dbConnect";
 import User from "@/lib/models/User";
+import { requireAdmin } from "@/lib/auth";
 
 export async function GET(req) {
+  const { response } = requireAdmin(req);
+  if (response) return response;
   await dbConnect();
 
   try {

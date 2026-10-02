@@ -1,3 +1,5 @@
+"use client";
+
 import { Html5Qrcode } from "html5-qrcode";
 import { useEffect, useRef, useState } from "react";
 

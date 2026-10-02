@@ -2,8 +2,11 @@ import { NextResponse } from "next/server";
 import dbConnect from "@/lib/dbConnect";
 import User from "@/lib/models/User";
 import * as XLSX from "xlsx";
+import { requireAdmin } from "@/lib/auth";
 
 export async function POST(req) {
+  const { response } = requireAdmin(req);
+  if (response) return response;
   await dbConnect();
 
   try {

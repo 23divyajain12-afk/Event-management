@@ -389,7 +389,7 @@ export default function CertificatesPage() {
               <>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-base">Upload Certificate</CardTitle>
-                  <p className="text-sm text-muted-foreground">Upload the certificate template. The attendee's name will be placed on it in the next step.</p>
+                  <p className="text-sm text-muted-foreground">Upload the certificate template. The attendee&apos;s name will be placed on it in the next step.</p>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div
@@ -433,7 +433,7 @@ export default function CertificatesPage() {
                 <CardHeader className="pb-2">
                   <CardTitle className="text-base">Set Name Position</CardTitle>
                   <p className="text-sm text-muted-foreground">
-                    Drag the <span className="text-blue-600 font-medium">blue box</span> to position the attendee's name on the certificate. Drag the <span className="text-blue-600 font-medium">right edge</span> to resize the font.
+                    Drag the <span className="text-blue-600 font-medium">blue box</span> to position the attendee&apos;s name on the certificate. Drag the <span className="text-blue-600 font-medium">right edge</span> to resize the font.
                   </p>
                 </CardHeader>
                 <CardContent className="space-y-4">

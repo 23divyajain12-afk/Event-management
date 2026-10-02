@@ -1,0 +1,634 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import * as XLSX from "xlsx";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useAuth } from "@/lib/hooks/useAuth";
+
+const EMPTY_EVENT = {
+  eventId: "",
+  name: "",
+  participantSource: { type: "mongodb", spreadsheetUrl: "", worksheet: "" },
+  fieldMappings: { name: "participant.name", email: "participant.email", prn: "participant.prn" },
+  ticketTemplateUrl: "",
+  certificateTemplateUrl: "",
+  ticketSettings: { enabled: true, qrPlaceholder: "{{ticket.qr}}" },
+  emailSettings: { enabled: true, delayMs: 1000, dailyLimit: 1500 },
+  emailTemplate: {
+    subject: "{{event.name}} - Registration confirmation",
+    html: "<p>Hello {{participant.name}},</p><p>Your registration for {{event.name}} is confirmed.</p><p>Please find your personalized event document attached when applicable.</p>",
+  },
+};
+
+const NAV_ITEMS = [
+  ["Guidelines", "/guidelines"],
+  ["Scan Attendance", "/"],
+  ["Events & Templates", "/events"],
+  ["Convert to JSON", "/convert-data"],
+  ["Add Participant", "/add-participant"],
+  ["Send Tickets", "/send-tickets"],
+  ["Send Email", "/send-email"],
+  ["Total Attendance", "/attendance"],
+  ["Send Certificates", "/certificates"],
+];
+
+function cleanEvent(event) {
+  return {
+    ...EMPTY_EVENT,
+    ...event,
+    participantSource: { ...EMPTY_EVENT.participantSource, ...(event.participantSource || {}) },
+    fieldMappings: event.fieldMappings || {},
+    ticketSettings: { ...EMPTY_EVENT.ticketSettings, ...(event.ticketSettings || {}) },
+    emailSettings: { ...EMPTY_EVENT.emailSettings, ...(event.emailSettings || {}) },
+    emailTemplate: { ...EMPTY_EVENT.emailTemplate, ...(event.emailTemplate || {}) },
+  };
+}
+
+export default function EventsPage() {
+  const router = useRouter();
+  const { loading: authLoading, logout } = useAuth();
+  const [events, setEvents] = useState([]);
+  const [eventForm, setEventForm] = useState(EMPTY_EVENT);
+  const [selectedEventId, setSelectedEventId] = useState("");
+  const [mappingText, setMappingText] = useState(JSON.stringify(EMPTY_EVENT.fieldMappings, null, 2));
+  const [notice, setNotice] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [sourcePreview, setSourcePreview] = useState(null);
+  const [emailPreview, setEmailPreview] = useState(null);
+  const [operationType, setOperationType] = useState("email");
+  const [attachmentKind, setAttachmentKind] = useState("");
+  const [otherAttachment, setOtherAttachment] = useState(null);
+  const [testRecipient, setTestRecipient] = useState("");
+  const [jobs, setJobs] = useState([]);
+  const [activeJob, setActiveJob] = useState(null);
+  const [devices, setDevices] = useState([]);
+  const [pairingCode, setPairingCode] = useState("");
+
+  const refreshEvents = useCallback(async () => {
+    const response = await fetch("/api/events", { cache: "no-store" });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || "Unable to load events.");
+    setEvents(data.events || []);
+  }, []);
+
+  const refreshEventTools = useCallback(async (eventId) => {
+    if (!eventId) {
+      setJobs([]);
+      setDevices([]);
+      return;
+    }
+    const [jobResponse, deviceResponse] = await Promise.all([
+      fetch(`/api/events/${encodeURIComponent(eventId)}/jobs`, { cache: "no-store" }),
+      fetch(`/api/scanner/devices?eventId=${encodeURIComponent(eventId)}`, { cache: "no-store" }),
+    ]);
+    const [jobData, deviceData] = await Promise.all([jobResponse.json(), deviceResponse.json()]);
+    if (!jobResponse.ok) throw new Error(jobData.message || "Unable to load event jobs.");
+    if (!deviceResponse.ok) throw new Error(deviceData.message || "Unable to load scanner devices.");
+    setJobs(jobData.jobs || []);
+    setDevices(deviceData.devices || []);
+    setActiveJob((jobData.jobs || []).find((job) => ["PENDING", "RUNNING"].includes(job.status)) || null);
+  }, []);
+
+  useEffect(() => {
+    if (authLoading) return;
+    refreshEvents().catch((error) => setNotice(error.message));
+  }, [authLoading, refreshEvents]);
+
+  useEffect(() => {
+    const requested = new URLSearchParams(window.location.search).get("operation");
+    if (["email", "ticket", "certificate"].includes(requested)) setOperationType(requested);
+  }, []);
+
+  const changeForm = (key, value) => setEventForm((current) => ({ ...current, [key]: value }));
+  const changeNested = (group, key, value) => setEventForm((current) => ({
+    ...current,
+    [group]: { ...current[group], [key]: value },
+  }));
+
+  const chooseEvent = async (eventId) => {
+    setNotice("");
+    setSelectedEventId(eventId);
+    setSourcePreview(null);
+    setEmailPreview(null);
+    if (!eventId) {
+      setEventForm(EMPTY_EVENT);
+      setMappingText(JSON.stringify(EMPTY_EVENT.fieldMappings, null, 2));
+      await refreshEventTools("");
+      return;
+    }
+    try {
+      const response = await fetch(`/api/events/${encodeURIComponent(eventId)}`, { cache: "no-store" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || "Unable to load event.");
+      const next = cleanEvent(data.event);
+      setEventForm(next);
+      setMappingText(JSON.stringify(next.fieldMappings, null, 2));
+      await refreshEventTools(eventId);
+    } catch (error) {
+      setNotice(error.message);
+    }
+  };
+
+  const saveEvent = async () => {
+    setBusy(true);
+    setNotice("");
+    try {
+      let fieldMappings;
+      try {
+        fieldMappings = JSON.parse(mappingText || "{}");
+      } catch {
+        throw new Error("Field mappings must be valid JSON.");
+      }
+      const response = await fetch("/api/events", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...eventForm, fieldMappings }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || "Unable to save event.");
+      setEventForm(cleanEvent(data.event));
+      setMappingText(JSON.stringify(data.event.fieldMappings || {}, null, 2));
+      setSelectedEventId(data.event.eventId);
+      await refreshEvents();
+      await refreshEventTools(data.event.eventId);
+      setNotice("Event configuration saved.");
+    } catch (error) {
+      setNotice(error.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const previewSource = async () => {
+    if (!eventForm.eventId) return setNotice("Save the event before previewing its source.");
+    setBusy(true);
+    try {
+      const response = await fetch(`/api/events/${encodeURIComponent(eventForm.eventId)}/preview-source`);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || "Source preview failed.");
+      setSourcePreview(data);
+      setNotice("");
+    } catch (error) {
+      setNotice(error.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const importExcel = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file || !eventForm.eventId) return;
+    setBusy(true);
+    try {
+      const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
+      const rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { defval: "" });
+      const response = await fetch(`/api/events/${encodeURIComponent(eventForm.eventId)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "import-excel", rows }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || "Excel import failed.");
+      changeNested("participantSource", "type", "excel");
+      await refreshEvents();
+      await previewSource();
+      setNotice(`Imported ${data.imported} rows into this event's Excel source.`);
+    } catch (error) {
+      setNotice(error.message);
+    } finally {
+      setBusy(false);
+      event.target.value = "";
+    }
+  };
+
+  const previewEmail = async () => {
+    if (!eventForm.eventId) return setNotice("Save the event and map a participant source first.");
+    setBusy(true);
+    try {
+      const response = await fetch(`/api/events/${encodeURIComponent(eventForm.eventId)}/jobs`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "preview-email", subject: eventForm.emailTemplate.subject, html: eventForm.emailTemplate.html }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || "Email preview failed.");
+      setEmailPreview(data.preview);
+      setNotice("");
+    } catch (error) {
+      setNotice(error.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const sendTestEmail = async () => {
+    if (!eventForm.eventId) return setNotice("Save the event before sending a test email.");
+    setBusy(true);
+    try {
+      const response = await fetch(`/api/events/${encodeURIComponent(eventForm.eventId)}/jobs`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "test-email",
+          to: testRecipient,
+          subject: eventForm.emailTemplate.subject,
+          html: eventForm.emailTemplate.html,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || "Test email failed.");
+      setNotice(data.message);
+    } catch (error) {
+      setNotice(error.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const createJob = async () => {
+    if (!selectedEventId) return setNotice("Save and select an event before queueing an operation.");
+    setBusy(true);
+    try {
+      let attachment;
+      if (otherAttachment) {
+        if (otherAttachment.size > 6 * 1024 * 1024) throw new Error("Choose an attachment smaller than 6 MB.");
+        const dataUrl = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result).split(",")[1] || "");
+          reader.onerror = () => reject(reader.error);
+          reader.readAsDataURL(otherAttachment);
+        });
+        attachment = { filename: otherAttachment.name, mimeType: otherAttachment.type, base64: dataUrl };
+      }
+      const response = await fetch(`/api/events/${encodeURIComponent(selectedEventId)}/jobs`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: operationType,
+          attachmentKind: operationType === "email" ? attachmentKind : "",
+          attachment,
+          subject: eventForm.emailTemplate.subject,
+          html: eventForm.emailTemplate.html,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || "Could not queue operation.");
+      setActiveJob(data.job);
+      setNotice(`${data.job.type} operation queued for ${data.job.recipientCount} recipients.`);
+      await refreshEventTools(selectedEventId);
+      setActiveJob(data.job);
+    } catch (error) {
+      setNotice(error.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const activeJobId = activeJob?._id;
+  const activeJobStatus = activeJob?.status;
+
+  useEffect(() => {
+    if (!activeJobId || !["PENDING", "RUNNING"].includes(activeJobStatus)) return;
+    let stopped = false;
+    let timer;
+    const processNext = async () => {
+      try {
+        const response = await fetch(`/api/jobs/${encodeURIComponent(activeJobId)}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "process" }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.message || "Job processor failed.");
+        if (stopped) return;
+        setActiveJob(data.job);
+        setJobs((current) => current.map((job) => job._id === data.job._id ? { ...job, ...data.job } : job));
+        if (["PENDING", "RUNNING"].includes(data.job.status)) {
+          timer = setTimeout(processNext, 200);
+        } else {
+          await refreshEventTools(selectedEventId);
+        }
+      } catch (error) {
+        if (stopped) return;
+        setNotice(`Job paused: ${error.message}. It can resume from this page.`);
+        timer = setTimeout(processNext, 3000);
+      }
+    };
+    timer = setTimeout(processNext, 0);
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+    };
+  }, [activeJobId, activeJobStatus, refreshEventTools, selectedEventId]);
+
+  const createScannerDevice = async (color) => {
+    if (!selectedEventId) return;
+    try {
+      const response = await fetch("/api/scanner/devices", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ eventId: selectedEventId, color }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || "Unable to provision scanner.");
+      setPairingCode(data.pairingCode);
+      setNotice(`${color.toUpperCase()} scanner code is single-use and expires in ${data.expiresInMinutes} minutes.`);
+      await refreshEventTools(selectedEventId);
+    } catch (error) {
+      setNotice(error.message);
+    }
+  };
+
+  const disableDevice = async (deviceId) => {
+    const response = await fetch("/api/scanner/devices", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ deviceId, active: false }),
+    });
+    const data = await response.json();
+    if (!response.ok) return setNotice(data.message || "Unable to revoke scanner.");
+    await refreshEventTools(selectedEventId);
+  };
+
+  const retryJob = async (jobId) => {
+    const response = await fetch(`/api/jobs/${encodeURIComponent(jobId)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "retry" }),
+    });
+    const data = await response.json();
+    if (!response.ok) return setNotice(data.message || "Retry failed.");
+    setActiveJob(data.job);
+    await refreshEventTools(selectedEventId);
+    setActiveJob(data.job);
+  };
+
+  const cleanupJob = async (jobId) => {
+    const response = await fetch(`/api/jobs/${encodeURIComponent(jobId)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "cleanup" }),
+    });
+    const data = await response.json();
+    if (!response.ok) return setNotice(data.message || "Temporary file cleanup failed.");
+    setNotice(data.message);
+    await refreshEventTools(selectedEventId);
+  };
+
+  if (authLoading) return null;
+
+  return (
+    <div className="min-h-screen flex bg-background">
+      <aside className="hidden w-64 shrink-0 flex-col border-r border-border bg-card md:flex">
+        <div className="border-b border-border px-6 py-5 font-bold text-lg">Abhivriddhi</div>
+        <nav className="flex-1 space-y-1 px-3 py-4">
+          {NAV_ITEMS.map(([label, href]) => (
+            <button key={href} onClick={() => router.push(href)}
+              className={`w-full rounded-md px-3 py-2 text-left text-sm hover:bg-accent ${href === "/events" ? "bg-accent font-semibold" : ""}`}>
+              {label}
+            </button>
+          ))}
+        </nav>
+        <button onClick={logout} className="border-t border-border p-4 text-left text-sm text-destructive">Log out</button>
+      </aside>
+
+      <main className="mx-auto w-full max-w-6xl flex-1 space-y-5 p-4 md:p-8">
+        <header className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold">Events, Templates & Operations</h1>
+            <p className="mt-1 text-sm text-muted-foreground">Configure participant sources and field mappings, then queue personalized ticket, certificate, or email jobs.</p>
+          </div>
+          <div className="flex gap-2">
+            <select value={selectedEventId} onChange={(e) => chooseEvent(e.target.value)}
+              className="h-10 min-w-52 rounded-md border border-input bg-background px-3 text-sm">
+              <option value="">New event…</option>
+              {events.map((event) => <option key={event.eventId} value={event.eventId}>{event.name} ({event.eventId})</option>)}
+            </select>
+            <Button variant="outline" onClick={() => chooseEvent("")}>New</Button>
+          </div>
+        </header>
+        <nav className="flex gap-2 overflow-x-auto pb-1 md:hidden">
+          {NAV_ITEMS.map(([label, href]) => (
+            <button key={href} onClick={() => router.push(href)}
+              className={`shrink-0 rounded-md border border-border px-3 py-2 text-xs ${href === "/events" ? "bg-accent font-semibold" : "bg-card"}`}>
+              {label}
+            </button>
+          ))}
+        </nav>
+
+        {notice && <div role="status" className="rounded-md border border-border bg-card p-3 text-sm">{notice}</div>}
+
+        <Card>
+          <CardHeader><CardTitle>1 · Event and participant source</CardTitle></CardHeader>
+          <CardContent className="grid gap-4 md:grid-cols-2">
+            <label className="space-y-1 text-sm">Event ID
+              <input value={eventForm.eventId} onChange={(e) => changeForm("eventId", e.target.value)}
+                placeholder="spring-workshop" className="h-10 w-full rounded-md border border-input bg-background px-3" />
+            </label>
+            <label className="space-y-1 text-sm">Event name
+              <input value={eventForm.name} onChange={(e) => changeForm("name", e.target.value)}
+                placeholder="Spring Workshop" className="h-10 w-full rounded-md border border-input bg-background px-3" />
+            </label>
+            <label className="space-y-1 text-sm">Participant source
+              <select value={eventForm.participantSource.type}
+                onChange={(e) => changeNested("participantSource", "type", e.target.value)}
+                className="h-10 w-full rounded-md border border-input bg-background px-3">
+                <option value="mongodb">Existing MongoDB participants</option>
+                <option value="excel">Imported Excel workbook</option>
+                <option value="googleSheets">Google Sheets (server-side)</option>
+              </select>
+            </label>
+            {eventForm.participantSource.type === "googleSheets" && (
+              <>
+                <label className="space-y-1 text-sm md:col-span-2">Google Sheets URL
+                  <input value={eventForm.participantSource.spreadsheetUrl}
+                    onChange={(e) => changeNested("participantSource", "spreadsheetUrl", e.target.value)}
+                    placeholder="https://docs.google.com/spreadsheets/d/…" className="h-10 w-full rounded-md border border-input bg-background px-3" />
+                  <span className="block text-xs text-muted-foreground">Share the sheet with the configured server-side Google service account. Credentials never go to the browser.</span>
+                </label>
+                <label className="space-y-1 text-sm">Worksheet title or gid
+                  <input value={eventForm.participantSource.worksheet}
+                    onChange={(e) => changeNested("participantSource", "worksheet", e.target.value)}
+                    placeholder="Participants or 0" className="h-10 w-full rounded-md border border-input bg-background px-3" />
+                </label>
+              </>
+            )}
+            <label className="space-y-1 text-sm md:col-span-2">Field mappings · source column → participant property
+              <textarea rows={6} value={mappingText} onChange={(e) => setMappingText(e.target.value)}
+                className="w-full rounded-md border border-input bg-background p-3 font-mono text-xs" />
+              <span className="block text-xs text-muted-foreground">Example: {`{"Full Name":"participant.name","Email ID":"participant.email","Department":"participant.department"}`}. Unmapped columns are retained as normalized custom participant fields.</span>
+            </label>
+            {eventForm.participantSource.type === "excel" && (
+              <label className="space-y-1 text-sm md:col-span-2">Import Excel participants
+                <input type="file" accept=".xlsx,.xls,.csv" disabled={!eventForm.eventId || busy}
+                  onChange={importExcel} className="block w-full rounded-md border border-input p-2" />
+                <span className="block text-xs text-muted-foreground">Rows are stored against this event; field mapping is applied when the operation runs.</span>
+              </label>
+            )}
+            <div className="flex flex-wrap items-center gap-2 md:col-span-2">
+              <Button onClick={saveEvent} disabled={busy}>{busy ? "Saving…" : "Save event configuration"}</Button>
+              <Button variant="outline" onClick={previewSource} disabled={busy || !selectedEventId}>Preview source fields</Button>
+              {sourcePreview && <span className="text-sm text-muted-foreground">{sourcePreview.rowCount} participants · {sourcePreview.fields.join(", ")}</span>}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader><CardTitle>2 · Shared Google Slides templates</CardTitle></CardHeader>
+          <CardContent className="grid gap-4 md:grid-cols-2">
+            <label className="space-y-1 text-sm">Ticket Google Slides URL
+              <input value={eventForm.ticketTemplateUrl} onChange={(e) => changeForm("ticketTemplateUrl", e.target.value)}
+                placeholder="https://docs.google.com/presentation/d/…" className="h-10 w-full rounded-md border border-input bg-background px-3" />
+              <span className="block text-xs text-muted-foreground">Use mapped {"{{participant.*}}"}, {"{{event.name}}"}, {"{{ticket.id}}"}, and one {"{{ticket.qr}}"} placeholder. The source template is copied, not modified.</span>
+            </label>
+            <label className="space-y-1 text-sm">Certificate Google Slides URL
+              <input value={eventForm.certificateTemplateUrl} onChange={(e) => changeForm("certificateTemplateUrl", e.target.value)}
+                placeholder="https://docs.google.com/presentation/d/…" className="h-10 w-full rounded-md border border-input bg-background px-3" />
+              <span className="block text-xs text-muted-foreground">Certificates accept participant/event placeholders only—no ticket ID or QR.</span>
+            </label>
+            <label className="space-y-1 text-sm">QR placeholder
+              <input value={eventForm.ticketSettings.qrPlaceholder}
+                onChange={(e) => changeNested("ticketSettings", "qrPlaceholder", e.target.value)}
+                className="h-10 w-full rounded-md border border-input bg-background px-3" />
+            </label>
+            <div className="flex flex-col justify-center gap-2 text-sm">
+              <label className="flex items-center gap-2"><input type="checkbox" checked={eventForm.ticketSettings.enabled}
+                onChange={(e) => changeNested("ticketSettings", "enabled", e.target.checked)} /> Tickets enabled</label>
+              <label className="flex items-center gap-2"><input type="checkbox" checked={eventForm.emailSettings.enabled}
+                onChange={(e) => changeNested("emailSettings", "enabled", e.target.checked)} /> Email sending enabled</label>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader><CardTitle>3 · Custom HTML email and delivery settings</CardTitle></CardHeader>
+          <CardContent className="space-y-4">
+            <label className="block space-y-1 text-sm">Subject
+              <input value={eventForm.emailTemplate.subject}
+                onChange={(e) => changeNested("emailTemplate", "subject", e.target.value)}
+                className="h-10 w-full rounded-md border border-input bg-background px-3" />
+            </label>
+            <label className="block space-y-1 text-sm">HTML body
+              <textarea rows={9} value={eventForm.emailTemplate.html}
+                onChange={(e) => changeNested("emailTemplate", "html", e.target.value)}
+                className="w-full rounded-md border border-input bg-background p-3 font-mono text-xs" />
+              <span className="block text-xs text-muted-foreground">Variables include mapped participant properties, {`{{event.name}}`}, and (for ticket jobs) {`{{ticket.id}}`}. Participant values are HTML-escaped.</span>
+            </label>
+            <div className="grid gap-4 md:grid-cols-2">
+              <label className="space-y-1 text-sm">Email spacing (ms)
+                <input type="number" min="0" value={eventForm.emailSettings.delayMs}
+                  onChange={(e) => changeNested("emailSettings", "delayMs", Number(e.target.value))}
+                  className="h-10 w-full rounded-md border border-input bg-background px-3" />
+              </label>
+              <label className="space-y-1 text-sm">Daily email ceiling
+                <input type="number" min="1" value={eventForm.emailSettings.dailyLimit}
+                  onChange={(e) => changeNested("emailSettings", "dailyLimit", Number(e.target.value))}
+                  className="h-10 w-full rounded-md border border-input bg-background px-3" />
+              </label>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" onClick={previewEmail} disabled={busy}>Preview with a participant</Button>
+              <input type="email" value={testRecipient} onChange={(e) => setTestRecipient(e.target.value)}
+                placeholder="test recipient email" className="h-10 min-w-56 rounded-md border border-input bg-background px-3 text-sm" />
+              <Button variant="outline" onClick={sendTestEmail} disabled={busy || !testRecipient}>Send test email</Button>
+            </div>
+            {emailPreview && (
+              <div className="space-y-2 rounded-md border border-border p-3">
+                <p className="text-sm font-medium">Subject: {emailPreview.subject}</p>
+                <iframe title="Rendered email preview" sandbox="" srcDoc={emailPreview.html}
+                  className="h-72 w-full rounded border border-border bg-white" />
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader><CardTitle>4 · Persistent batch operation</CardTitle></CardHeader>
+          <CardContent className="flex flex-wrap items-end gap-3">
+            <label className="space-y-1 text-sm">Operation
+              <select value={operationType} onChange={(e) => setOperationType(e.target.value)}
+                className="h-10 rounded-md border border-input bg-background px-3">
+                <option value="email">Custom email</option>
+                <option value="ticket">Personalized ticket PDF + email</option>
+                <option value="certificate">Personalized certificate PDF + email</option>
+              </select>
+            </label>
+            {operationType === "email" && (
+              <>
+                <label className="space-y-1 text-sm">PDF attachment
+                  <select value={attachmentKind} onChange={(e) => setAttachmentKind(e.target.value)}
+                    className="h-10 rounded-md border border-input bg-background px-3">
+                    <option value="">No generated PDF</option>
+                    <option value="ticket">Generate and attach ticket PDF</option>
+                    <option value="certificate">Generate and attach certificate PDF</option>
+                  </select>
+                </label>
+                <label className="space-y-1 text-sm">Optional file
+                  <input type="file" onChange={(e) => setOtherAttachment(e.target.files?.[0] || null)}
+                    className="block h-10 max-w-60 rounded-md border border-input p-2 text-xs" />
+                </label>
+              </>
+            )}
+            <Button disabled={busy || !selectedEventId} onClick={createJob}>Queue operation</Button>
+            <p className="basis-full text-xs text-muted-foreground">Each request processes one recipient and persists status, progress, errors, retries, and cleanup metadata. Refreshing this page resumes pending work.</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader><CardTitle>5 · Offline scanner devices</CardTitle></CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" disabled={!selectedEventId} onClick={() => createScannerDevice("red")}>Provision RED scanner</Button>
+              <Button variant="outline" disabled={!selectedEventId} onClick={() => createScannerDevice("blue")}>Provision BLUE scanner</Button>
+              {pairingCode && <code className="rounded bg-muted p-3 text-sm">{pairingCode}</code>}
+            </div>
+            <p className="text-xs text-muted-foreground">Pairing codes are single-use and expire after 30 minutes. Scanner tokens are per-device and revocable; same-color scans stay local, with manual used-ticket sync.</p>
+            <div className="space-y-2">
+              {devices.map((device) => (
+                <div key={device._id} className="flex flex-wrap items-center justify-between gap-2 rounded border border-border p-3 text-sm">
+                  <span>{device.name} · {device.color.toUpperCase()} · {device.active ? "Active" : "Revoked"} · {device.pairedAt ? "Paired" : "Not paired"}</span>
+                  {device.active && <Button size="sm" variant="destructive" onClick={() => disableDevice(device._id)}>Revoke</Button>}
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader><CardTitle>Persistent operations</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
+            {activeJob && ["PENDING", "RUNNING"].includes(activeJob.status) && (
+              <div className="rounded-md border border-primary p-3 text-sm">
+                <div className="font-semibold">{activeJob.type} · {activeJob.status}</div>
+                <div className="mt-1">Processed: {activeJob.processedCount || 0} / {activeJob.recipientCount} · Successful: {activeJob.successfulCount || 0} · Failed: {activeJob.failedCount || 0}</div>
+                <progress className="mt-2 h-2 w-full" value={activeJob.processedCount || 0} max={activeJob.recipientCount || 1} />
+              </div>
+            )}
+            {jobs.map((job) => (
+              <div key={job._id} className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border p-3 text-sm">
+                <div>
+                  <div className="font-medium capitalize">{job.type} · {job.status}</div>
+                  <div className="text-muted-foreground">Processed {job.processedCount} / {job.recipientCount} · Success {job.successfulCount} · Failed {job.failedCount}</div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {["PARTIAL", "FAILED"].includes(job.status) && <Button size="sm" variant="outline" onClick={() => retryJob(job._id)}>Retry failures</Button>}
+                  {job.pendingCleanupCount > 0 && <Button size="sm" variant="outline" onClick={() => cleanupJob(job._id)}>Clean {job.pendingCleanupCount} temp files</Button>}
+                </div>
+                {job.recipients?.some((recipient) => recipient.status === "FAILED") && (
+                  <ul className="basis-full space-y-1 text-xs text-destructive">
+                    {job.recipients.filter((recipient) => recipient.status === "FAILED").slice(0, 10).map((recipient) => (
+                      <li key={`${job._id}-${recipient.email}`}>{recipient.email}: {recipient.lastError}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ))}
+            {!jobs.length && <p className="text-sm text-muted-foreground">No operations have been queued for this event.</p>}
+          </CardContent>
+        </Card>
+      </main>
+    </div>
+  );
+}

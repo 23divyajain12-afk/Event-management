@@ -7,8 +7,11 @@ import AttendanceCOMBO from "@/lib/models/AttendanceCOMBO";
 import CertificateSent from "@/lib/models/CertificateSent";
 import nodemailer from "nodemailer";
 import sharp from "sharp";
+import { requireAdmin } from "@/lib/auth";
 
 export async function POST(req) {
+  const { response } = requireAdmin(req);
+  if (response) return response;
   await dbConnect();
 
   const formData = await req.formData();

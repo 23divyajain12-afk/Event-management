@@ -25,6 +25,7 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/hooks/useAuth";
 
 const navItems = [
+  { label: "Events & Templates", icon: Mail, href: "/events" },
   { label: "Send Email", icon: Mail, href: "/send-email" },
 ];
 
@@ -592,6 +593,19 @@ export default function SendEmailPage() {
 
         {/* Page Content */}
         <main className="p-4 md:p-8 max-w-6xl w-full mx-auto space-y-6">
+          <Card className="border-primary/30 bg-card/95">
+            <CardContent className="flex flex-wrap items-center justify-between gap-4 p-4">
+              <div>
+                <p className="font-semibold">Event-based email queue</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Configure Google Sheets, mapped fields, personalized HTML, PDF attachments, durable progress, and retries.
+                </p>
+              </div>
+              <Button variant="outline" onClick={() => router.push("/events?operation=email")}>
+                Open event email workflow
+              </Button>
+            </CardContent>
+          </Card>
           <Card className="border-primary/30 bg-card/95">
             <CardHeader>
               <div className="flex items-center justify-between gap-3">

@@ -14,6 +14,7 @@ const DownloadPDFButton = dynamic(() => import("@/components/DownloadPDFButton")
 
 const navItems = [
   { label: "Guidelines", icon: BookOpen, href: "/guidelines" },
+  { label: "Events & Templates", icon: BookOpen, href: "/events" },
   { label: "Scan Attendance", icon: QrCode, href: "/" },
   { label: "Convert to JSON", icon: FileJson, href: "/convert-data" },
   { label: "Add Participant", icon: Users, href: "/add-participant" },
@@ -23,7 +24,7 @@ const navItems = [
   { label: "Send Certificates", icon: Award, href: "/certificates" },
 ];
 
-const TICKET_TYPES = ["ALL", "DAY1", "DAY2", "COMBO"];
+const TICKET_TYPES = ["ALL", "DAY1", "DAY2", "COMBO", "EVENT"];
 const EVENTS = ["ALL", "Event A", "Event B", "Event C"];
 
 export default function AttendancePage() {
@@ -33,14 +34,19 @@ export default function AttendancePage() {
   const [ticketType, setTicketType] = useState("ALL");
   const [event, setEvent] = useState("ALL");
   const [data, setData] = useState(null);
+  const [ticketTypes, setTicketTypes] = useState(TICKET_TYPES);
+  const [events, setEvents] = useState(EVENTS);
   const [loading, setLoading] = useState(false);
 
   const fetchAttendance = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/get-attendance?ticketType=${ticketType}&event=${event}`);
+      const params = new URLSearchParams({ ticketType, event });
+      const res = await fetch(`/api/get-attendance?${params}`);
       const result = await res.json();
       setData(result);
+      if (result.ticketTypes?.length) setTicketTypes(["ALL", ...new Set([...TICKET_TYPES.slice(1), ...result.ticketTypes])]);
+      if (result.events?.length) setEvents(["ALL", ...new Set([...EVENTS.slice(1), ...result.events])]);
     } catch (err) {
       console.error("Error fetching attendance:", err);
     }
@@ -158,7 +164,7 @@ export default function AttendancePage() {
           {/* Stats Cards */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             {[
-              { label: "Total", value: data ? data.counts.DAY1 + data.counts.DAY2 + data.counts.COMBO : "-", color: "text-foreground" },
+              { label: "Total", value: data ? data.counts.total : "-", color: "text-foreground" },
               { label: "DAY1", value: data ? data.counts.DAY1 : "-", color: "text-blue-500" },
               { label: "DAY2", value: data ? data.counts.DAY2 : "-", color: "text-purple-500" },
               { label: "COMBO", value: data ? data.counts.COMBO : "-", color: "text-green-500" },
@@ -183,7 +189,7 @@ export default function AttendancePage() {
                   <div className="flex items-center gap-2">
                     <label className="text-sm font-medium whitespace-nowrap">Ticket Type:</label>
                     <div className="flex gap-1">
-                      {TICKET_TYPES.map((t) => (
+                      {ticketTypes.map((t) => (
                         <button key={t} onClick={() => setTicketType(t)}
                           className={cn("px-3 py-1 rounded-md text-xs font-medium border transition-colors",
                             ticketType === t ? "bg-primary text-primary-foreground border-primary" : "bg-transparent border-input hover:bg-accent"
@@ -195,7 +201,7 @@ export default function AttendancePage() {
                   <div className="flex items-center gap-2">
                     <label className="text-sm font-medium whitespace-nowrap">Event:</label>
                     <div className="flex gap-1">
-                      {EVENTS.map((e) => (
+                      {events.map((e) => (
                         <button key={e} onClick={() => setEvent(e)}
                           className={cn("px-3 py-1 rounded-md text-xs font-medium border transition-colors",
                             event === e ? "bg-primary text-primary-foreground border-primary" : "bg-transparent border-input hover:bg-accent"

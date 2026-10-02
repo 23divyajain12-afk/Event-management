@@ -1,4 +1,5 @@
 import jwt from "jsonwebtoken";
+import { NextResponse } from "next/server";
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
@@ -10,4 +11,19 @@ export function verifyToken(req) {
   } catch {
     return null;
   }
+}
+
+export function requireAdmin(req) {
+  const admin = verifyToken(req);
+  if (!admin) {
+    return {
+      admin: null,
+      response: NextResponse.json(
+        { message: "Unauthorized. Please log in as an admin." },
+        { status: 401 }
+      ),
+    };
+  }
+
+  return { admin, response: null };
 }

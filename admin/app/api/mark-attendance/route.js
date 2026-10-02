@@ -4,11 +4,28 @@ import User from "@/lib/models/User";
 import AttendanceDAY1 from "@/lib/models/AttendanceDAY1";
 import AttendanceDAY2 from "@/lib/models/AttendanceDAY2";
 import AttendanceCOMBO from "@/lib/models/AttendanceCOMBO";
+import { requireAdmin } from "@/lib/auth";
+import { authenticateScanner, verifyCrossColorTicket } from "@/lib/services/scannerService";
 
 export async function POST(req) {
+  const body = await req.json();
+  if (body?.ticketId) {
+    await dbConnect();
+    try {
+      const device = await authenticateScanner(req);
+      if (!device) return NextResponse.json({ message: "Scanner authentication required." }, { status: 401 });
+      const result = await verifyCrossColorTicket(device, body.ticketId);
+      return NextResponse.json(result, { status: result.status });
+    } catch (error) {
+      console.error("Cross-color attendance verification error:", error);
+      return NextResponse.json({ message: "Verification unavailable; refer to the help desk." }, { status: 500 });
+    }
+  }
+  const { response } = requireAdmin(req);
+  if (response) return response;
   await dbConnect();
 
-  const { userId, eventName } = await req.json();
+  const { userId, eventName } = body;
   
   try {
     // Parse QR data to extract fields
