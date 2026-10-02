@@ -5,6 +5,8 @@ const JobRecipientSchema = new mongoose.Schema(
     email: { type: String, required: true, lowercase: true },
     participant: { type: mongoose.Schema.Types.Mixed, default: {} },
     ticketId: { type: String, default: "" },
+    ticketColor: { type: String, enum: ["", "red", "blue"], default: "" },
+    templateUrl: { type: String, default: "" },
     status: {
       type: String,
       enum: ["PENDING", "PROCESSING", "SENT", "FAILED"],

@@ -7,7 +7,7 @@ import {
   validateSlidesTemplate,
 } from "@/lib/services/slidesTemplateService";
 import { loadEventParticipants } from "@/lib/services/participantSourceService";
-import { issueTicket } from "@/lib/services/ticketService";
+import { issueTicket, ticketColor } from "@/lib/services/ticketService";
 import { renderHtmlTemplate, sendPersonalizedEmail } from "@/lib/services/emailService";
 import { deleteDriveFile } from "@/lib/services/googleApi";
 import {
@@ -102,24 +102,30 @@ export async function createOperationJob({
   }
 
   let templateUrl = "";
-  let slidesTokens = [];
+  let slidesTokenSets = [];
+  const ticketTemplateUrls = {
+    red: event.ticketTemplates?.red || event.ticketTemplateUrl || "",
+    blue: event.ticketTemplates?.blue || event.ticketTemplateUrl || "",
+  };
   if (type === "ticket" || (type === "email" && attachmentKind === "ticket")) {
-    templateUrl = event.ticketTemplateUrl;
-    const validation = await validateSlidesTemplate(templateUrl, { ...sampleContext, ticket: { id: validationTicketId, qr: "" } }, [
-      "participant.name",
-      "event.name",
-      "ticket.id",
-      "ticket.qr",
-    ], event.ticketSettings?.qrPlaceholder || "{{ticket.qr}}");
-    slidesTokens = validation.tokens;
+    const context = { ...sampleContext, ticket: { id: validationTicketId, qr: "" } };
+    for (const color of ["red", "blue"]) {
+      const validation = await validateSlidesTemplate(ticketTemplateUrls[color], context, [
+        "participant.name",
+        "event.name",
+        "ticket.id",
+        "ticket.qr",
+      ], event.ticketSettings?.qrPlaceholder || "{{ticket.qr}}");
+      slidesTokenSets.push(validation.tokens);
+    }
   } else if (type === "certificate" || (type === "email" && attachmentKind === "certificate")) {
     templateUrl = event.certificateTemplateUrl;
     const validation = await validateSlidesTemplate(templateUrl, sampleContext, ["participant.name", "event.name"]);
-    slidesTokens = validation.tokens;
+    slidesTokenSets.push(validation.tokens);
   }
   for (const participant of recipients) {
     const context = getEmailContext(participant, event, validationTicketId);
-    renderTemplate(slidesTokens.map((token) => `{{${token}}}`).join(" "), {
+    for (const tokens of slidesTokenSets) renderTemplate(tokens.map((token) => `{{${token}}}`).join(" "), {
       ...context,
       ticket: { ...context.ticket, qr: "" },
     }, { strict: true });
@@ -138,7 +144,6 @@ export async function createOperationJob({
     recipients: recipients.map((participant) => ({
       email: participant.email,
       participant,
-      ticketId: "",
       status: "PENDING",
     })),
   });
@@ -192,6 +197,10 @@ export async function runJobItem(jobId) {
     }
     const event = await Event.findOne({ eventId: job.eventId });
     if (!event) throw new Error("Event no longer exists.");
+    const ticketTemplateUrls = {
+      red: event.ticketTemplates?.red || event.ticketTemplateUrl || "",
+      blue: event.ticketTemplates?.blue || event.ticketTemplateUrl || "",
+    };
     if ((job.type === "ticket" || (job.type === "email" && job.attachmentKind === "ticket")) && !recipient.ticketId) {
       const ticket = await issueTicket({
         eventId: event.eventId,
@@ -199,6 +208,24 @@ export async function runJobItem(jobId) {
         participant: recipient.participant,
       });
       recipient.ticketId = ticket.ticketId;
+      recipient.ticketColor = ticket.color;
+    }
+    if (job.type === "ticket" || (job.type === "email" && job.attachmentKind === "ticket")) {
+      recipient.ticketColor ||= ticketColor(recipient.ticketId) || "";
+      recipient.templateUrl ||= job.templateUrl || ticketTemplateUrls[recipient.ticketColor];
+      if (!recipient.templateUrl) {
+        throw new Error(`No ${recipient.ticketColor || "matching"} ticket template is stored for this recipient.`);
+      }
+      await OperationJob.updateOne(
+        { _id: job._id, leaseId, [`recipients.${index}.status`]: { $in: ["PENDING", "PROCESSING"] } },
+        {
+          $set: {
+            [`recipients.${index}.ticketId`]: recipient.ticketId,
+            [`recipients.${index}.ticketColor`]: recipient.ticketColor,
+            [`recipients.${index}.templateUrl`]: recipient.templateUrl,
+          },
+        }
+      );
     }
     const context = getEmailContext(recipient.participant, event, recipient.ticketId);
     const attachments = [];
@@ -212,7 +239,7 @@ export async function runJobItem(jobId) {
 
     if (job.type === "ticket" || (job.type === "email" && job.attachmentKind === "ticket")) {
       const generated = await createPersonalizedPdf({
-        templateUrl: job.templateUrl,
+        templateUrl: recipient.templateUrl,
         context: { ...context, ticket: { id: recipient.ticketId, qr: "" } },
         qrPlaceholder: event.ticketSettings?.qrPlaceholder || "{{ticket.qr}}",
         onTemporaryFile: async (fileId, removed = false) => {

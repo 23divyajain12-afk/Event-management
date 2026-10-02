@@ -15,6 +15,10 @@ const EventSchema = new mongoose.Schema(
       excelVersion: { type: String, default: "" },
     },
     fieldMappings: { type: Map, of: String, default: {} },
+    ticketTemplates: {
+      red: { type: String, default: "" },
+      blue: { type: String, default: "" },
+    },
     ticketTemplateUrl: { type: String, default: "" },
     certificateTemplateUrl: { type: String, default: "" },
     emailTemplate: {

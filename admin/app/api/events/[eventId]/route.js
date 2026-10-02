@@ -15,6 +15,10 @@ export async function GET(req, { params }) {
   const event = await Event.findOne({ eventId: eventId.toLowerCase() });
   if (!event) return NextResponse.json({ message: "Event not found." }, { status: 404 });
   const result = event.toObject({ flattenMaps: true });
+  result.ticketTemplates = {
+    red: result.ticketTemplates?.red || result.ticketTemplateUrl || "",
+    blue: result.ticketTemplates?.blue || result.ticketTemplateUrl || "",
+  };
   return NextResponse.json({ event: result });
 }
 

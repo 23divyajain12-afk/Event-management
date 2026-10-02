@@ -12,7 +12,7 @@ const EMPTY_EVENT = {
   name: "",
   participantSource: { type: "mongodb", spreadsheetUrl: "", worksheet: "" },
   fieldMappings: { name: "participant.name", email: "participant.email", prn: "participant.prn" },
-  ticketTemplateUrl: "",
+  ticketTemplates: { red: "", blue: "" },
   certificateTemplateUrl: "",
   ticketSettings: { enabled: true, qrPlaceholder: "{{ticket.qr}}" },
   emailSettings: { enabled: true, delayMs: 1000, dailyLimit: 1500 },
@@ -38,6 +38,11 @@ function cleanEvent(event) {
   return {
     ...EMPTY_EVENT,
     ...event,
+    ticketTemplates: {
+      ...EMPTY_EVENT.ticketTemplates,
+      red: event.ticketTemplates?.red || event.ticketTemplateUrl || "",
+      blue: event.ticketTemplates?.blue || event.ticketTemplateUrl || "",
+    },
     participantSource: { ...EMPTY_EVENT.participantSource, ...(event.participantSource || {}) },
     fieldMappings: event.fieldMappings || {},
     ticketSettings: { ...EMPTY_EVENT.ticketSettings, ...(event.ticketSettings || {}) },
@@ -478,11 +483,23 @@ export default function EventsPage() {
         <Card>
           <CardHeader><CardTitle>2 · Shared Google Slides templates</CardTitle></CardHeader>
           <CardContent className="grid gap-4 md:grid-cols-2">
-            <label className="space-y-1 text-sm">Ticket Google Slides URL
-              <input value={eventForm.ticketTemplateUrl} onChange={(e) => changeForm("ticketTemplateUrl", e.target.value)}
+            <label className="space-y-1 text-sm">Red Ticket Google Slides URL
+              <input value={eventForm.ticketTemplates.red}
+                onChange={(e) => setEventForm((current) => ({
+                  ...current,
+                  ticketTemplates: { ...current.ticketTemplates, red: e.target.value },
+                }))}
                 placeholder="https://docs.google.com/presentation/d/…" className="h-10 w-full rounded-md border border-input bg-background px-3" />
-              <span className="block text-xs text-muted-foreground">Use mapped {"{{participant.*}}"}, {"{{event.name}}"}, {"{{ticket.id}}"}, and one {"{{ticket.qr}}"} placeholder. The source template is copied, not modified.</span>
             </label>
+            <label className="space-y-1 text-sm">Blue Ticket Google Slides URL
+              <input value={eventForm.ticketTemplates.blue}
+                onChange={(e) => setEventForm((current) => ({
+                  ...current,
+                  ticketTemplates: { ...current.ticketTemplates, blue: e.target.value },
+                }))}
+                placeholder="https://docs.google.com/presentation/d/…" className="h-10 w-full rounded-md border border-input bg-background px-3" />
+            </label>
+            <p className="text-xs text-muted-foreground md:col-span-2">Both ticket templates use mapped {"{{participant.*}}"}, {"{{event.name}}"}, {"{{ticket.id}}"}, and one {"{{ticket.qr}}"} placeholder. The source templates are copied, not modified.</p>
             <label className="space-y-1 text-sm">Certificate Google Slides URL
               <input value={eventForm.certificateTemplateUrl} onChange={(e) => changeForm("certificateTemplateUrl", e.target.value)}
                 placeholder="https://docs.google.com/presentation/d/…" className="h-10 w-full rounded-md border border-input bg-background px-3" />

@@ -6,6 +6,10 @@ import { mapParticipant } from "@/lib/services/templateEngine";
 
 function cleanEvent(event) {
   const result = event.toObject ? event.toObject({ flattenMaps: true }) : event;
+  result.ticketTemplates = {
+    red: result.ticketTemplates?.red || result.ticketTemplateUrl || "",
+    blue: result.ticketTemplates?.blue || result.ticketTemplateUrl || "",
+  };
   return result;
 }
 
@@ -54,13 +58,15 @@ export async function POST(req) {
     if (!Number.isInteger(dailyLimit) || dailyLimit < 1 || dailyLimit > 100_000) {
       return NextResponse.json({ message: "Daily email limit must be an integer between 1 and 100000." }, { status: 400 });
     }
+    const legacyTicketTemplate = String(body.ticketTemplateUrl || "").trim();
     const set = {
       name,
       "participantSource.type": body.participantSource?.type || "mongodb",
       "participantSource.spreadsheetUrl": String(body.participantSource?.spreadsheetUrl || "").trim(),
       "participantSource.worksheet": String(body.participantSource?.worksheet || "").trim(),
       fieldMappings: mappings,
-      ticketTemplateUrl: String(body.ticketTemplateUrl || "").trim(),
+      "ticketTemplates.red": String(body.ticketTemplates?.red || legacyTicketTemplate).trim(),
+      "ticketTemplates.blue": String(body.ticketTemplates?.blue || legacyTicketTemplate).trim(),
       certificateTemplateUrl: String(body.certificateTemplateUrl || "").trim(),
       "emailTemplate.subject": String(body.emailTemplate?.subject || ""),
       "emailTemplate.html": String(body.emailTemplate?.html || ""),
@@ -80,7 +86,7 @@ export async function POST(req) {
 
     const event = await Event.findOneAndUpdate(
       { eventId },
-      { $set: set, $setOnInsert: { eventId } },
+      { $set: set, $unset: { ticketTemplateUrl: 1 }, $setOnInsert: { eventId } },
       { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true }
     );
     return NextResponse.json({ event: cleanEvent(event) });
