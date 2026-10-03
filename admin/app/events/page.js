@@ -70,6 +70,18 @@ export default function EventsPage() {
   const [activeJob, setActiveJob] = useState(null);
   const [devices, setDevices] = useState([]);
   const [pairingCode, setPairingCode] = useState("");
+  const [tracking, setTracking] = useState({ participants: [], counts: null, pagination: { page: 1, limit: 20, total: 0, pages: 1 } });
+  const [trackingFilters, setTrackingFilters] = useState({
+    search: "",
+    ticketStatus: "",
+    emailStatus: "",
+    color: "",
+    scanStatus: "",
+  });
+  const [trackingPage, setTrackingPage] = useState(1);
+  const [trackingLimit, setTrackingLimit] = useState(20);
+  const [trackingLoading, setTrackingLoading] = useState(false);
+  const [selectedParticipant, setSelectedParticipant] = useState(null);
 
   const refreshEvents = useCallback(async () => {
     const response = await fetch("/api/events", { cache: "no-store" });
@@ -96,6 +108,35 @@ export default function EventsPage() {
     setActiveJob((jobData.jobs || []).find((job) => ["PENDING", "RUNNING"].includes(job.status)) || null);
   }, []);
 
+  const refreshTracking = useCallback(async (eventId = selectedEventId) => {
+    if (!eventId) {
+      setTracking({ participants: [], counts: null, pagination: { page: 1, limit: trackingLimit, total: 0, pages: 1 } });
+      return;
+    }
+    const query = new URLSearchParams({
+      page: String(trackingPage),
+      limit: String(trackingLimit),
+      ...trackingFilters,
+    });
+    setTrackingLoading(true);
+    try {
+      const response = await fetch(`/api/events/${encodeURIComponent(eventId)}/participants?${query}`, { cache: "no-store" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || "Unable to load participant tracking.");
+      setTracking(data);
+    } finally {
+      setTrackingLoading(false);
+    }
+  }, [selectedEventId, trackingFilters, trackingLimit, trackingPage]);
+
+  useEffect(() => {
+    if (!authLoading && selectedEventId) {
+      refreshTracking().catch((error) => setNotice(error.message));
+    } else if (!selectedEventId) {
+      setTracking({ participants: [], counts: null, pagination: { page: 1, limit: trackingLimit, total: 0, pages: 1 } });
+    }
+  }, [authLoading, refreshTracking, selectedEventId, trackingLimit]);
+
   useEffect(() => {
     if (authLoading) return;
     refreshEvents().catch((error) => setNotice(error.message));
@@ -115,6 +156,9 @@ export default function EventsPage() {
   const chooseEvent = async (eventId) => {
     setNotice("");
     setSelectedEventId(eventId);
+    setTrackingPage(1);
+    setTrackingFilters({ search: "", ticketStatus: "", emailStatus: "", color: "", scanStatus: "" });
+    setSelectedParticipant(null);
     setSourcePreview(null);
     setEmailPreview(null);
     if (!eventId) {
@@ -382,6 +426,99 @@ export default function EventsPage() {
     await refreshEventTools(selectedEventId);
   };
 
+  const changeTrackingFilter = (key, value) => {
+    setTrackingFilters((current) => ({ ...current, [key]: value }));
+    setTrackingPage(1);
+  };
+
+  const exportParticipants = async () => {
+    if (!selectedEventId) return;
+    const query = new URLSearchParams({ format: "csv", ...trackingFilters });
+    try {
+      const response = await fetch(`/api/events/${encodeURIComponent(selectedEventId)}/participants?${query}`);
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.message || "CSV export failed.");
+      }
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${selectedEventId}-participants.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+      setNotice("Participant CSV exported.");
+    } catch (error) {
+      setNotice(error.message);
+    }
+  };
+
+  const resendTicket = async (participant) => {
+    setBusy(true);
+    try {
+      const response = await fetch(`/api/events/${encodeURIComponent(selectedEventId)}/participants`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "resend", participantKey: participant.key }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || "Unable to queue ticket resend.");
+      setActiveJob(data.job);
+      setNotice(data.message);
+      await refreshEventTools(selectedEventId);
+      setActiveJob(data.job);
+    } catch (error) {
+      setNotice(error.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const deleteParticipant = async (participant) => {
+    if (!window.confirm(`Delete ${participant.name || participant.email} from this event? Their event ticket and event-job record will also be removed.`)) return;
+    setBusy(true);
+    try {
+      const response = await fetch(`/api/events/${encodeURIComponent(selectedEventId)}/participants`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ participantKey: participant.key }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || "Unable to delete participant.");
+      setSelectedParticipant(null);
+      setNotice(data.message);
+      await refreshTracking();
+    } catch (error) {
+      setNotice(error.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const deleteEvent = async () => {
+    if (!selectedEventId) return;
+    const confirmation = window.prompt(`Permanently delete ${selectedEventId} and its event-specific records? Type the event ID to confirm.`);
+    if (confirmation !== selectedEventId) return;
+    setBusy(true);
+    try {
+      const response = await fetch(`/api/events/${encodeURIComponent(selectedEventId)}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmEventId: confirmation }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || "Unable to delete event.");
+      setSelectedEventId("");
+      setEventForm(EMPTY_EVENT);
+      setSelectedParticipant(null);
+      await refreshEvents();
+      setNotice(data.message);
+    } catch (error) {
+      setNotice(error.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   if (authLoading) return null;
 
   return (
@@ -475,10 +612,150 @@ export default function EventsPage() {
             <div className="flex flex-wrap items-center gap-2 md:col-span-2">
               <Button onClick={saveEvent} disabled={busy}>{busy ? "Saving…" : "Save event configuration"}</Button>
               <Button variant="outline" onClick={previewSource} disabled={busy || !selectedEventId}>Preview source fields</Button>
+              {selectedEventId && <Button variant="destructive" onClick={deleteEvent} disabled={busy}>Permanently delete event</Button>}
               {sourcePreview && <span className="text-sm text-muted-foreground">{sourcePreview.rowCount} participants · {sourcePreview.fields.join(", ")}</span>}
             </div>
           </CardContent>
         </Card>
+
+        {selectedEventId && (
+          <Card>
+            <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3">
+              <div>
+                <CardTitle>Participant &amp; Ticket Tracking</CardTitle>
+                <p className="mt-1 text-sm text-muted-foreground">Event-specific participant, ticket, delivery, and scan status.</p>
+              </div>
+              <Button variant="outline" onClick={exportParticipants} disabled={trackingLoading}>Export CSV</Button>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                {[
+                  ["Total Participants", tracking.counts?.totalParticipants],
+                  ["Tickets Generated", tracking.counts?.ticketsGenerated],
+                  ["Tickets Sent", tracking.counts?.ticketsSent],
+                  ["Red Tickets", tracking.counts?.redTickets],
+                  ["Blue Tickets", tracking.counts?.blueTickets],
+                  ["Scanned", tracking.counts?.scanned],
+                  ["Not Scanned", tracking.counts?.notScanned],
+                  ["Failed", tracking.counts?.failed],
+                ].map(([label, count]) => (
+                  <div key={label} className="rounded-md border border-border p-3">
+                    <div className="text-xs text-muted-foreground">{label}</div>
+                    <div className="mt-1 text-xl font-semibold">{count ?? "—"}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                <input value={trackingFilters.search} onChange={(e) => changeTrackingFilter("search", e.target.value)}
+                  placeholder="Search name, PRN, email, ticket ID" aria-label="Search participants"
+                  className="h-10 rounded-md border border-input bg-background px-3 text-sm lg:col-span-2" />
+                <select value={trackingFilters.ticketStatus} onChange={(e) => changeTrackingFilter("ticketStatus", e.target.value)}
+                  aria-label="Filter by ticket status" className="h-10 rounded-md border border-input bg-background px-3 text-sm">
+                  <option value="">All ticket statuses</option><option value="GENERATED">Generated</option><option value="NOT GENERATED">Not generated</option>
+                </select>
+                <select value={trackingFilters.emailStatus} onChange={(e) => changeTrackingFilter("emailStatus", e.target.value)}
+                  aria-label="Filter by email status" className="h-10 rounded-md border border-input bg-background px-3 text-sm">
+                  <option value="">All email statuses</option><option value="SENT">Sent</option><option value="FAILED">Failed</option><option value="PENDING">Pending</option><option value="PROCESSING">Processing</option><option value="NOT SENT">Not sent</option>
+                </select>
+                <select value={trackingFilters.color} onChange={(e) => changeTrackingFilter("color", e.target.value)}
+                  aria-label="Filter by ticket color" className="h-10 rounded-md border border-input bg-background px-3 text-sm">
+                  <option value="">All colors</option><option value="red">Red</option><option value="blue">Blue</option>
+                </select>
+                <select value={trackingFilters.scanStatus} onChange={(e) => changeTrackingFilter("scanStatus", e.target.value)}
+                  aria-label="Filter by scan status" className="h-10 rounded-md border border-input bg-background px-3 text-sm">
+                  <option value="">All scan statuses</option><option value="SCANNED">Scanned</option><option value="NOT SCANNED">Not scanned</option>
+                </select>
+                <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                  Rows
+                  <select value={trackingLimit} onChange={(e) => { setTrackingLimit(Number(e.target.value)); setTrackingPage(1); }}
+                    className="h-10 rounded-md border border-input bg-background px-3 text-sm text-foreground">
+                    <option value={20}>20</option><option value={50}>50</option><option value={100}>100</option>
+                  </select>
+                  per page
+                </label>
+              </div>
+
+              <div className="overflow-x-auto rounded-md border border-border">
+                <table className="w-full min-w-[1150px] border-collapse text-left text-sm">
+                  <thead className="bg-muted/60">
+                    <tr>{["Name", "PRN", "Email", "Ticket ID", "Color", "Ticket Status", "Email Status", "Scanned", "Scanned At", "Actions"].map((heading) => <th key={heading} className="px-3 py-2 font-medium">{heading}</th>)}</tr>
+                  </thead>
+                  <tbody>
+                    {tracking.participants.map((participant) => (
+                      <tr key={participant.key} className="border-t border-border">
+                        <td className="px-3 py-2">{participant.name || "—"}</td>
+                        <td className="px-3 py-2">{participant.prn || "—"}</td>
+                        <td className="px-3 py-2">{participant.email || "—"}</td>
+                        <td className="px-3 py-2 font-mono text-xs">{participant.ticketId || "—"}</td>
+                        <td className="px-3 py-2">{participant.color ? participant.color.toUpperCase() : "—"}</td>
+                        <td className="px-3 py-2">{participant.ticketStatus}</td>
+                        <td className="px-3 py-2">{participant.emailStatus}</td>
+                        <td className="px-3 py-2">{participant.scanned ? "SCANNED" : "NOT SCANNED"}</td>
+                        <td className="px-3 py-2">{participant.scannedAt ? new Date(participant.scannedAt).toLocaleString() : "—"}</td>
+                        <td className="px-3 py-2">
+                          <div className="flex gap-2">
+                            <Button size="sm" variant="outline" onClick={() => setSelectedParticipant(participant)}>View</Button>
+                            {participant.ticketStatus === "GENERATED" && <Button size="sm" variant="outline" disabled={busy} onClick={() => resendTicket(participant)}>Resend</Button>}
+                            <Button size="sm" variant="destructive" disabled={busy} onClick={() => deleteParticipant(participant)}>Delete</Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                    {!tracking.participants.length && (
+                      <tr><td colSpan={10} className="px-3 py-8 text-center text-muted-foreground">{trackingLoading ? "Loading participants…" : "No participants match this event and filter."}</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
+                <span className="text-muted-foreground">
+                  {tracking.pagination.total ? `${(tracking.pagination.page - 1) * tracking.pagination.limit + 1}–${Math.min(tracking.pagination.page * tracking.pagination.limit, tracking.pagination.total)} of ${tracking.pagination.total}` : "0 participants"}
+                  {trackingLoading ? " · Updating…" : ""}
+                </span>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" disabled={trackingPage <= 1 || trackingLoading} onClick={() => setTrackingPage((page) => page - 1)}>Previous</Button>
+                  <span className="px-2 py-2">Page {tracking.pagination.page} of {tracking.pagination.pages}</span>
+                  <Button variant="outline" size="sm" disabled={trackingPage >= tracking.pagination.pages || trackingLoading} onClick={() => setTrackingPage((page) => page + 1)}>Next</Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {selectedParticipant && (
+          <div role="dialog" aria-modal="true" aria-label="Participant details" className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <Card className="max-h-[90vh] w-full max-w-2xl overflow-y-auto">
+              <CardHeader className="flex flex-row items-center justify-between gap-3">
+                <CardTitle>Participant &amp; Ticket Details</CardTitle>
+                <Button variant="outline" size="sm" onClick={() => setSelectedParticipant(null)}>Close</Button>
+              </CardHeader>
+              <CardContent className="grid gap-5 sm:grid-cols-2">
+                <section className="space-y-2 text-sm">
+                  <h3 className="font-semibold">Participant</h3>
+                  <p>Name: {selectedParticipant.name || "—"}</p><p>PRN: {selectedParticipant.prn || "—"}</p><p>Email: {selectedParticipant.email || "—"}</p>
+                </section>
+                <section className="space-y-2 text-sm">
+                  <h3 className="font-semibold">Ticket</h3>
+                  <p>Ticket ID: {selectedParticipant.ticketId || "—"}</p><p>Color: {selectedParticipant.color || "—"}</p>
+                  <p>Generated status: {selectedParticipant.ticketStatus}</p>
+                  <p>Template: {selectedParticipant.templateUrl ? <a className="break-all text-primary underline" href={selectedParticipant.templateUrl} target="_blank" rel="noreferrer">{selectedParticipant.templateUrl}</a> : "—"}</p>
+                </section>
+                <section className="space-y-2 text-sm">
+                  <h3 className="font-semibold">Email</h3>
+                  <p>Status: {selectedParticipant.emailStatus}</p><p>Sent time: {selectedParticipant.sentAt ? new Date(selectedParticipant.sentAt).toLocaleString() : "—"}</p>
+                  {selectedParticipant.failureReason && <p className="break-words text-destructive">Failure reason: {selectedParticipant.failureReason}</p>}
+                </section>
+                <section className="space-y-2 text-sm">
+                  <h3 className="font-semibold">Scanner</h3>
+                  <p>Status: {selectedParticipant.scanned ? "SCANNED" : "NOT SCANNED"}</p>
+                  <p>Scan time: {selectedParticipant.scannedAt ? new Date(selectedParticipant.scannedAt).toLocaleString() : "—"}</p>
+                  <p>Device: {selectedParticipant.scanner ? `${selectedParticipant.scanner.name} (${selectedParticipant.scanner.color})` : "—"}</p>
+                </section>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         <Card>
           <CardHeader><CardTitle>2 · Shared Google Slides templates</CardTitle></CardHeader>

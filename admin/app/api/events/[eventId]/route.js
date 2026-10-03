@@ -3,6 +3,8 @@ import dbConnect from "@/lib/dbConnect";
 import Event from "@/lib/models/Event";
 import OperationJob from "@/lib/models/OperationJob";
 import EventParticipant from "@/lib/models/EventParticipant";
+import ScannerDevice from "@/lib/models/ScannerDevice";
+import Ticket from "@/lib/models/Ticket";
 import { requireAdmin } from "@/lib/auth";
 import { mapParticipant } from "@/lib/services/templateEngine";
 import crypto from "crypto";
@@ -76,9 +78,38 @@ export async function DELETE(req, { params }) {
   if (response) return response;
   await dbConnect();
   const { eventId } = await params;
-  const running = await OperationJob.exists({ eventId: eventId.toLowerCase(), status: { $in: ["PENDING", "RUNNING"] } });
+  const normalizedEventId = eventId.toLowerCase();
+  const body = await req.json().catch(() => ({}));
+  if (body.confirmEventId !== normalizedEventId) {
+    return NextResponse.json({ message: "Type the exact event ID to confirm permanent deletion." }, { status: 400 });
+  }
+  const event = await Event.findOne({ eventId: normalizedEventId });
+  if (!event) return NextResponse.json({ message: "Event not found." }, { status: 404 });
+  const running = await OperationJob.exists({ eventId: normalizedEventId, status: { $in: ["PENDING", "RUNNING"] } });
   if (running) return NextResponse.json({ message: "Cannot delete an event with an active operation." }, { status: 409 });
-  const deleted = await Event.findOneAndDelete({ eventId: eventId.toLowerCase() });
-  if (!deleted) return NextResponse.json({ message: "Event not found." }, { status: 404 });
-  return NextResponse.json({ message: "Event deleted." });
+
+  const session = await Event.startSession();
+  try {
+    await session.withTransaction(async () => {
+      const activeJob = await OperationJob.exists({
+        eventId: normalizedEventId,
+        status: { $in: ["PENDING", "RUNNING"] },
+      }).session(session);
+      if (activeJob) {
+        throw Object.assign(new Error("Cannot delete an event with an active operation."), { status: 409 });
+      }
+      await EventParticipant.deleteMany({ eventId: normalizedEventId }).session(session);
+      await Ticket.deleteMany({ eventId: normalizedEventId }).session(session);
+      await OperationJob.deleteMany({ eventId: normalizedEventId }).session(session);
+      await ScannerDevice.deleteMany({ eventId: normalizedEventId }).session(session);
+      await Event.deleteOne({ _id: event._id, eventId: normalizedEventId }).session(session);
+    });
+  } catch (error) {
+    if (error.status) return NextResponse.json({ message: error.message }, { status: error.status });
+    console.error("Delete event transaction error:", error);
+    return NextResponse.json({ message: "Unable to safely delete the event and its event-specific records." }, { status: 500 });
+  } finally {
+    await session.endSession();
+  }
+  return NextResponse.json({ message: "Event and its event-specific records deleted." });
 }
