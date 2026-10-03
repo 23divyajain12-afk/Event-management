@@ -1,6 +1,6 @@
-# Abhivriddhi — Admin Panel & Deployment Guide
+# Admin Panel & Deployment Guide
 
-This guide provides a comprehensive operational overview of the **Abhivriddhi Admin Panel**, a step-by-step workflow for event managers, and detailed deployment blueprints for both the **Main Website** and the **Admin Panel**.
+This guide provides a comprehensive operational overview of the **Admin Panel**, a step-by-step workflow for event managers, and detailed deployment blueprints for both the **Admin Panel**.
 
 ---
 
