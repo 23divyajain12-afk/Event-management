@@ -1,163 +1,91 @@
-# Abhivriddhi — Official Website
+# Abhivriddhi Event Management System
 
-The official website of **Abhivriddhi**, the Student Training & Development Committee of VIT Pune.
+A modular event-management platform built for **Abhivriddhi – Student Training & Development Committee, VIT Pune**.
 
-This repository contains two projects:
+The system centralizes event operations including participant management, ticket generation, personalized documents, email delivery, QR-based ticket scanning, attendance, certificates, and participant/ticket tracking.
 
-| Folder | Stack | Purpose |
-|--------|-------|---------|
-| `main-website/` | React + Vite | Public-facing website |
-| `admin/` | Next.js 15 | Admin panel for event & attendance management |
+## Features
 
----
-
-## Main Website (`main-website/`)
-
-Built with **React + Vite**.
-
-### Getting Started
-
-```bash
-cd main-website
-npm install
-npm run dev
-```
-
-Runs at `http://localhost:5173`
-
-### Build for Production
-
-```bash
-npm run build
-```
-
-### Pages
-
-- `/` — Home
-- `/about` — About Abhivriddhi
-- `/events` — Featured Events
-- `/team` — Team (Coming Soon)
-- `/sponsors` — Our Sponsors
-- `/contact` — Contact Us
-
-### Custom Font
-
-The navbar and loader use a custom font **Saman** located at:
-```
-main-website/src/fonts/SAMAN___.woff2
-```
-
----
-
-## Admin Panel (`admin/`)
-
-Built with **Next.js 15** + MongoDB.
-
-### Getting Started
-
-```bash
-cd admin
-npm install
-npm run dev
-```
-
-Runs at `http://localhost:3000`
-
-### Environment Variables
-
-Copy `.env.example` to `.env` and fill in the values:
-
-```env
-# MongoDB (Atlas for production, local for development)
-MONGODB_URI=mongodb://localhost:27017/qr-attendance
-
-# Email Config (Gmail)
-EMAIL=your@gmail.com
-EMAIL_PASSWORD=your_app_password
-
-# JWT Secret
-JWT_SECRET=your_jwt_secret
-
-# Seed Key (used once to create first admin)
-SEED_KEY=your_seed_key
-```
-
-### First Time Setup — Create Admin Account
-
-Run the dev server, then send a **POST** request to:
-
-```
-POST http://localhost:3000/api/auth/seed
-```
-
-```json
-{
-  "name": "Your Name",
-  "email": "your@email.com",
-  "password": "yourpassword",
-  "seedKey": "your_seed_key_from_env"
-}
-```
-
-This only needs to be done **once**. After that, login at `http://localhost:3000/login` directly.
-
-### Features
-
-- Admin login with JWT authentication
-- Add & manage event participants
-- QR code based attendance marking
-- Send event tickets via email
-- Send certificates via email
-- Attendance reports & export
-
-### Build for Production
-
-```bash
-npm run build
-npm start
-```
-
-> **Note:** Always run `npm run build` before `npm start`. Use `npm run dev` during development.
-
----
-
-## Project Structure
-
-```
-website/
-├── main-website/       # React + Vite public website
-│   ├── src/
-│   │   ├── components/ # Navbar, Footer, Hero, etc.
-│   │   ├── pages/      # About, Events, Team, Sponsors, Contact
-│   │   └── assets/     # Images, videos, fonts
-│   └── public/         # Static assets, sponsor logos
-│
-└── admin/              # Next.js admin panel
-    ├── app/            # Next.js app router pages & API routes
-    ├── components/     # UI components
-    └── lib/            # DB connection, models, auth utils
-```
-
----
+- Event creation and configuration
+- Participant management
+- Excel and Google Sheets participant sources
+- Dynamic participant field mapping
+- Personalized Google Slides tickets
+- QR-based ticket generation
+- Red/Blue ticket validation
+- Email ticket delivery
+- Offline-first QR scanning
+- Attendance tracking
+- Certificate generation
+- Participant and ticket tracking
+- Operation/job monitoring
+- Admin authentication
 
 ## Tech Stack
 
-**Main Website**
-- React 18
-- Vite
-- React Router DOM
+- **Frontend:** Next.js 15, React
+- **Backend:** Next.js App Router APIs
+- **Database:** MongoDB
+- **Documents:** Google Slides & Google Apps Script
+- **Email:** Gmail SMTP
+- **Scanner:** QR scanning + IndexedDB
 
-**Admin Panel**
-- Next.js 15
-- MongoDB + Mongoose
-- JWT Authentication
-- Tailwind CSS
-- Nodemailer (email)
-- QR Code scanning
+## System Overview
 
----
+```text
+Admin Panel
+     │
+     ▼
+Next.js Application
+     │
+     ├── MongoDB
+     │    ├── Events
+     │    ├── Participants
+     │    ├── Tickets
+     │    └── Operations
+     │
+     ├── Google Slides
+     │
+     ├── Google Apps Script
+     │
+     └── Gmail SMTP
+              │
+              ▼
+       Tickets / Emails
+              │
+              ▼
+        QR Scanner
 
-## Team
+## Project Structure
 
-Built by the **Abhivriddhi Technical Team 2026**  
-VIT Pune, Bibwewadi, Pune, Maharashtra
+admin/
+├── app/
+├── components/
+├── lib/
+├── public/
+└── AppsScript/
+    ├── Code.gs
+    └── README_AppsScript.md
+
+## Getting Started
+
+cd admin
+npm install
+npm run dev
+
+## Documentation
+- [Deployment & Account Setup](docs/DEPLOYMENT.md)
+- [Apps Script Setup](admin/AppsScript/README_AppsScript.md)
+
+## Security
+Never commit:
+- .env.local
+- Google service-account credentials
+- MongoDB credentials
+- Gmail App Passwords
+- API secrets
+- JWT secrets
+- Participant personal-data exports
+
+## Project Status
+Developed for operational use by the Abhivriddhi Student Training & Development Committee, VIT Pune.
