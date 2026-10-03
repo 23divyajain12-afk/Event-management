@@ -60,29 +60,75 @@ export async function POST(req) {
     }
     const legacyTicketTemplate = String(body.ticketTemplateUrl || "").trim();
     const set = {
-      name,
-      "participantSource.type": body.participantSource?.type || "mongodb",
-      "participantSource.spreadsheetUrl": String(body.participantSource?.spreadsheetUrl || "").trim(),
-      "participantSource.worksheet": String(body.participantSource?.worksheet || "").trim(),
-      fieldMappings: mappings,
-      "ticketTemplates.red": String(body.ticketTemplates?.red || legacyTicketTemplate).trim(),
-      "ticketTemplates.blue": String(body.ticketTemplates?.blue || legacyTicketTemplate).trim(),
-      certificateTemplateUrl: String(body.certificateTemplateUrl || "").trim(),
-      "emailTemplate.subject": String(body.emailTemplate?.subject || ""),
-      "emailTemplate.html": String(body.emailTemplate?.html || ""),
-      "ticketSettings.enabled": body.ticketSettings?.enabled !== false,
-      "ticketSettings.qrPlaceholder": String(body.ticketSettings?.qrPlaceholder || "{{ticket.qr}}").trim(),
-      "emailSettings.enabled": body.emailSettings?.enabled !== false,
-      "emailSettings.delayMs": delayMs,
-      "emailSettings.dailyLimit": dailyLimit,
-    };
+  name,
+  "participantSource.type": body.participantSource?.type || "mongodb",
+  "participantSource.spreadsheetUrl": String(
+    body.participantSource?.spreadsheetUrl || ""
+  ).trim(),
+  "participantSource.worksheet": String(
+    body.participantSource?.worksheet || ""
+  ).trim(),
 
-    if (set.participantSource.type === "googleSheets" && !set.participantSource.spreadsheetUrl) {
-      return NextResponse.json({ message: "A Google Sheets URL is required for this participant source." }, { status: 400 });
-    }
-    if (!["mongodb", "excel", "googleSheets"].includes(set.participantSource.type)) {
-      return NextResponse.json({ message: "Unsupported participant source." }, { status: 400 });
-    }
+  fieldMappings: mappings,
+
+  "ticketTemplates.red": String(
+    body.ticketTemplates?.red || legacyTicketTemplate
+  ).trim(),
+
+  "ticketTemplates.blue": String(
+    body.ticketTemplates?.blue || legacyTicketTemplate
+  ).trim(),
+
+  certificateTemplateUrl: String(
+    body.certificateTemplateUrl || ""
+  ).trim(),
+
+  "emailTemplate.subject": String(
+    body.emailTemplate?.subject || ""
+  ),
+
+  "emailTemplate.html": String(
+    body.emailTemplate?.html || ""
+  ),
+
+  "ticketSettings.enabled":
+    body.ticketSettings?.enabled !== false,
+
+  "ticketSettings.qrPlaceholder": String(
+    body.ticketSettings?.qrPlaceholder || "{{ticket.qr}}"
+  ).trim(),
+
+  "emailSettings.enabled":
+    body.emailSettings?.enabled !== false,
+
+  "emailSettings.delayMs": delayMs,
+  "emailSettings.dailyLimit": dailyLimit,
+};
+
+    const participantSourceType = body.participantSource?.type || "mongodb";
+const participantSpreadsheetUrl = String(
+  body.participantSource?.spreadsheetUrl || ""
+).trim();
+
+if (
+  participantSourceType === "googleSheets" &&
+  !participantSpreadsheetUrl
+) {
+  return NextResponse.json(
+    {
+      message:
+        "A Google Sheets URL is required for this participant source.",
+    },
+    { status: 400 }
+  );
+}
+
+if (!["mongodb", "excel", "googleSheets"].includes(participantSourceType)) {
+  return NextResponse.json(
+    { message: "Unsupported participant source." },
+    { status: 400 }
+  );
+}
 
     const event = await Event.findOneAndUpdate(
       { eventId },

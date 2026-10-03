@@ -11,7 +11,7 @@ import { useAuth } from "@/lib/hooks/useAuth";
 const navItems = [
   { label: "Guidelines", icon: BookOpen, href: "/guidelines" },
   { label: "Events & Templates", icon: BookOpen, href: "/events" },
-  { label: "Scan Attendance", icon: QrCode, href: "/" },
+  { label: "Scan Attendance", icon: QrCode, href: "/scanner" },
   { label: "Convert to JSON", icon: FileJson, href: "/convert-data" },
   { label: "Add Participant", icon: Users, href: "/add-participant" },
   { label: "Send Tickets", icon: Ticket, href: "/send-tickets" },
@@ -87,7 +87,7 @@ JIDNYESH TOKE,,jidnyesh@gmail.com,DAY2,Event A`,
   {
     step: "04",
     title: "Scan Attendance",
-    href: "/",
+    href: "/scanner",
     color: "bg-green-500",
     description: "On event day, scan participant QR codes to mark attendance in real time.",
     steps: [

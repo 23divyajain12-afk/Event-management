@@ -24,7 +24,7 @@ const EMPTY_EVENT = {
 
 const NAV_ITEMS = [
   ["Guidelines", "/guidelines"],
-  ["Scan Attendance", "/"],
+  ["Scan Attendance", "/scanner"],
   ["Events & Templates", "/events"],
   ["Convert to JSON", "/convert-data"],
   ["Add Participant", "/add-participant"],
@@ -34,7 +34,7 @@ const NAV_ITEMS = [
   ["Send Certificates", "/certificates"],
 ];
 
-function cleanEvent(event) {
+function cleanEvent(event = {}) {
   return {
     ...EMPTY_EVENT,
     ...event,
@@ -597,6 +597,7 @@ export default function EventsPage() {
           <CardHeader><CardTitle>5 · Offline scanner devices</CardTitle></CardHeader>
           <CardContent className="space-y-4">
             <div className="flex flex-wrap gap-2">
+              <Button variant="outline" disabled={!selectedEventId} onClick={() => router.push("/scanner")}>Open Scanner</Button>
               <Button variant="outline" disabled={!selectedEventId} onClick={() => createScannerDevice("red")}>Provision RED scanner</Button>
               <Button variant="outline" disabled={!selectedEventId} onClick={() => createScannerDevice("blue")}>Provision BLUE scanner</Button>
               {pairingCode && <code className="rounded bg-muted p-3 text-sm">{pairingCode}</code>}

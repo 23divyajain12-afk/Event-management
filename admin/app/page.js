@@ -1,10 +1,5 @@
-import ScannerPanel from "@/components/ScannerPanel";
+import { redirect } from "next/navigation";
 
-export const metadata = {
-  title: "Ticket Scanner | Abhivriddhi",
-  manifest: "/manifest.json",
-};
-
-export default function ScannerPage() {
-  return <ScannerPanel />;
+export default function HomePage() {
+  redirect("/login");
 }

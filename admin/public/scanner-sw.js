@@ -1,7 +1,7 @@
-const CACHE_NAME = "abhivriddhi-scanner-v1";
+const CACHE_NAME = "abhivriddhi-scanner-v2";
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.add("/")));
+  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.add("/scanner")));
   self.skipWaiting();
 });
 
@@ -19,15 +19,16 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
   if (url.origin !== self.location.origin) return;
   if (url.pathname.startsWith("/api/")) return;
+  if (event.request.mode === "navigate" && url.pathname !== "/scanner") return;
 
   if (event.request.mode === "navigate") {
     event.respondWith(
       fetch(event.request)
         .then((response) => {
-          if (response.ok) caches.open(CACHE_NAME).then((cache) => cache.put("/", response.clone()));
+          if (response.ok) caches.open(CACHE_NAME).then((cache) => cache.put("/scanner", response.clone()));
           return response;
         })
-        .catch(async () => (await caches.match("/")) || Response.error())
+        .catch(async () => (await caches.match("/scanner")) || Response.error())
     );
     return;
   }

@@ -15,7 +15,7 @@ const DownloadPDFButton = dynamic(() => import("@/components/DownloadPDFButton")
 const navItems = [
   { label: "Guidelines", icon: BookOpen, href: "/guidelines" },
   { label: "Events & Templates", icon: BookOpen, href: "/events" },
-  { label: "Scan Attendance", icon: QrCode, href: "/" },
+  { label: "Scan Attendance", icon: QrCode, href: "/scanner" },
   { label: "Convert to JSON", icon: FileJson, href: "/convert-data" },
   { label: "Add Participant", icon: Users, href: "/add-participant" },
   { label: "Send Tickets", icon: Ticket, href: "/send-tickets" },

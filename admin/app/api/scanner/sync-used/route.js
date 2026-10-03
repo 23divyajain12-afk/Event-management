@@ -30,8 +30,16 @@ export async function POST(req) {
         results.push({ ticketId, status: "synced" });
         continue;
       }
-      const alreadyUsed = await Ticket.exists({ eventId: device.eventId, ticketId, color: device.color, usedAt: { $ne: null } });
-      results.push({ ticketId, status: alreadyUsed ? "already-used" : "unknown" });
+      const alreadyUsed = await Ticket.findOne(
+        { eventId: device.eventId, ticketId, color: device.color, usedAt: { $ne: null } },
+        { usedBy: 1 }
+      ).lean();
+      const status = !alreadyUsed
+        ? "unknown"
+        : alreadyUsed.usedBy === String(device._id)
+          ? "already-synced"
+          : "already-used";
+      results.push({ ticketId, status });
     }
     await ScannerDevice.updateOne({ _id: device._id }, { $set: { lastSyncAt: new Date() } });
     return NextResponse.json({ results });

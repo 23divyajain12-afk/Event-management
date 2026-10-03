@@ -8,7 +8,7 @@ import { Users, QrCode, BarChart2, LogOut, Menu, X, FileJson, Award, Upload, Sen
 import { cn } from "@/lib/utils";
 
 const navItems = [
-  { label: "Scan Attendance", icon: QrCode, href: "/" },
+  { label: "Scan Attendance", icon: QrCode, href: "/scanner" },
   { label: "Convert to JSON", icon: FileJson, href: "/dashboard/convert-data" },
   { label: "Add Participant", icon: Users, href: "/dashboard/add-participant" },
   { label: "Send Tickets", icon: Ticket, href: "/dashboard/send-tickets" },

@@ -21,19 +21,25 @@ export async function authenticateScanner(req) {
 
 export async function pairScanner(pairingCode) {
   if (!pairingCode) throw new Error("Pairing code is required.");
-  const device = await ScannerDevice.findOne({
-    pairingCodeHash: hashToken(pairingCode),
-    active: true,
-    pairingExpiresAt: { $gt: new Date() },
-  });
-  if (!device) throw new Error("Pairing code is invalid or expired.");
-
   const token = crypto.randomBytes(32).toString("base64url");
-  device.tokenHash = hashToken(token);
-  device.pairingCodeHash = "";
-  device.pairingExpiresAt = null;
-  device.pairedAt = new Date();
-  await device.save();
+  const now = new Date();
+  const device = await ScannerDevice.findOneAndUpdate(
+    {
+      pairingCodeHash: hashToken(pairingCode),
+      active: true,
+      pairingExpiresAt: { $gt: now },
+    },
+    {
+      $set: {
+        tokenHash: hashToken(token),
+        pairingCodeHash: "",
+        pairingExpiresAt: null,
+        pairedAt: now,
+      },
+    },
+    { new: true }
+  );
+  if (!device) throw new Error("Pairing code is invalid or expired.");
   return { token, device };
 }
 

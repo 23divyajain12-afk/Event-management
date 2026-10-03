@@ -21,18 +21,39 @@ export function renderHtmlTemplate(template, context) {
 }
 
 let cachedTransporter;
+let cachedTransporterConfig;
 function getTransporter() {
   const email = process.env.EMAIL;
   const user = process.env.SMTP_USER || email;
   const password = process.env.EMAIL_PASSWORD;
-  if (!email || !user || !password) throw new Error("Configure EMAIL, SMTP_USER, and EMAIL_PASSWORD on the server.");
+  const host = process.env.SMTP_HOST;
+  const port = Number(process.env.SMTP_PORT || 587);
+  const secure = process.env.SMTP_SECURE === "true";
+  const transportConfig = { user, password, host, port, secure };
+  const transport = host ? "explicit SMTP host" : "Gmail service";
 
-  if (!cachedTransporter) {
-    if (process.env.SMTP_HOST) {
+  console.log("EMAIL CONFIG:", {
+    effectiveSmtpUser: user || "(not set)",
+    smtpHost: host || "smtp.gmail.com (Gmail service)",
+    smtpPort: host ? port : "(service default)",
+    secure: host ? secure : "(service default)",
+    transport,
+    passwordSet: Boolean(password),
+    passwordLength: password?.length || 0,
+  });
+
+  if (!email || !user || !password) {
+    throw new Error("Configure EMAIL and EMAIL_PASSWORD on the server; SMTP_USER is optional.");
+  }
+
+  const configChanged = !cachedTransporterConfig
+    || Object.keys(transportConfig).some((key) => cachedTransporterConfig[key] !== transportConfig[key]);
+  if (!cachedTransporter || configChanged) {
+    if (host) {
       cachedTransporter = nodemailer.createTransport({
-        host: process.env.SMTP_HOST,
-        port: Number(process.env.SMTP_PORT || 587),
-        secure: process.env.SMTP_SECURE === "true",
+        host,
+        port,
+        secure,
         auth: { user, pass: password },
       });
     } else {
@@ -41,6 +62,7 @@ function getTransporter() {
         auth: { user, pass: password },
       });
     }
+    cachedTransporterConfig = transportConfig;
   }
   return cachedTransporter;
 }

@@ -14,6 +14,8 @@ export default function ScannerPanel() {
   const [pendingSync, setPendingSync] = useState(0);
   const [loading, setLoading] = useState(true);
   const scanLock = useRef(false);
+  const scanLockTimeout = useRef(null);
+  const statusTimeout = useRef(null);
   const deviceRef = useRef(null);
 
   const refreshPendingCount = useCallback(async () => {
@@ -21,13 +23,32 @@ export default function ScannerPanel() {
     setPendingSync(used.filter((ticket) => !ticket.synced).length);
   }, []);
 
+  const clearRevokedDevice = useCallback(async () => {
+    await Promise.all([scannerStore.clear("valid"), scannerStore.clear("meta")]);
+    deviceRef.current = null;
+    setDevice(null);
+    setReady(false);
+    await refreshPendingCount();
+  }, [refreshPendingCount]);
+
   const downloadHashset = useCallback(async (currentDevice, clearUsed = false) => {
     const response = await fetch("/api/scanner/hashset", {
       headers: { Authorization: `Bearer ${currentDevice.token}` },
       cache: "no-store",
     });
     const result = await response.json();
-    if (!response.ok) throw new Error(result.message || "Could not download this counter's ticket list.");
+    if (!response.ok) {
+      const error = new Error(result.message || "Could not download this counter's ticket list.");
+      error.status = response.status;
+      throw error;
+    }
+    if (
+      result.eventId !== currentDevice.eventId
+      || result.color !== currentDevice.color
+      || !Array.isArray(result.ids)
+    ) {
+      throw new Error("The downloaded ticket list does not match this scanner device.");
+    }
 
     const previous = await scannerStore.get("meta", "eventId");
     if (previous?.value !== currentDevice.eventId || clearUsed) await scannerStore.clear("used");
@@ -48,10 +69,35 @@ export default function ScannerPanel() {
       try {
         const saved = await scannerStore.get("meta", "device");
         if (saved?.value) {
-          const valid = await scannerStore.getAll("valid");
-          if (!valid.length && navigator.onLine) {
-            await downloadHashset(saved.value);
+          if (navigator.onLine) {
+            try {
+              await downloadHashset(saved.value);
+            } catch (error) {
+              if (error.status === 401) {
+                await clearRevokedDevice();
+                if (mounted) {
+                  setStatus({
+                    kind: "deny",
+                    title: "SCANNER REVOKED",
+                    detail: "This device is no longer authorized. Ask an administrator for a new pairing code.",
+                  });
+                }
+              } else {
+                const valid = await scannerStore.getAll("valid");
+                setDevice(saved.value);
+                deviceRef.current = saved.value;
+                setReady(true);
+                setStatus({
+                  kind: "warn",
+                  title: valid.length ? "OFFLINE SCANNER READY" : "TICKET LIST UNAVAILABLE",
+                  detail: valid.length
+                    ? `Using ${valid.length} previously downloaded ${saved.value.color.toUpperCase()} tickets. Cross-color checks need a network connection.`
+                    : "The saved device has no cached tickets. Connect to the network and refresh the ticket list before admitting guests.",
+                });
+              }
+            }
           } else {
+            const valid = await scannerStore.getAll("valid");
             setDevice(saved.value);
             deviceRef.current = saved.value;
             setReady(true);
@@ -72,11 +118,12 @@ export default function ScannerPanel() {
     restore();
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("/scanner-sw.js").catch((error) => console.error("Scanner offline shell registration failed:", error));
     return () => { mounted = false; };
-  }, [downloadHashset, refreshPendingCount]);
+  }, [clearRevokedDevice, downloadHashset, refreshPendingCount]);
 
   const pairDevice = async (event) => {
     event.preventDefault();
     setLoading(true);
+    let pairingCompleted = false;
     try {
       const response = await fetch("/api/scanner/pair", {
         method: "POST",
@@ -85,14 +132,75 @@ export default function ScannerPanel() {
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.message || "Pairing failed.");
-      await downloadHashset({ ...result.device, token: result.token });
+      pairingCompleted = true;
+      const pairedDevice = { ...result.device, token: result.token };
+      const previous = await scannerStore.get("meta", "eventId");
+      if (previous?.value !== pairedDevice.eventId) await scannerStore.clear("used");
+      await scannerStore.clear("valid");
+      await scannerStore.put("meta", { key: "device", value: pairedDevice });
+      await scannerStore.put("meta", { key: "eventId", value: pairedDevice.eventId });
+      setDevice(pairedDevice);
+      deviceRef.current = pairedDevice;
+      setReady(true);
+      await downloadHashset(pairedDevice);
       setPairingCode("");
     } catch (error) {
-      setStatus({ kind: "deny", title: "Pairing failed", detail: error.message });
+      if (error.status === 401) {
+        await clearRevokedDevice();
+        setStatus({
+          kind: "deny",
+          title: "SCANNER REVOKED",
+          detail: "This device is no longer authorized. Ask an administrator for a new pairing code.",
+        });
+      } else if (pairingCompleted) {
+        setStatus({
+          kind: "warn",
+          title: "PAIRED — TICKET LIST UNAVAILABLE",
+          detail: `${error.message} The pairing is saved; reconnect and refresh the ticket list to continue.`,
+        });
+      } else {
+        setStatus({ kind: "deny", title: "Pairing failed", detail: error.message });
+      }
     } finally {
       setLoading(false);
     }
   };
+
+  const validateOnlineSession = useCallback(async (currentDevice) => {
+    if (!navigator.onLine) return true;
+    try {
+      const response = await fetch("/api/scanner/session", {
+        headers: { Authorization: `Bearer ${currentDevice.token}` },
+        cache: "no-store",
+      });
+      if (response.status === 401) {
+        await clearRevokedDevice();
+        setStatus({
+          kind: "deny",
+          title: "SCANNER REVOKED",
+          detail: "This device is no longer authorized. Ask an administrator for a new pairing code.",
+        });
+        return false;
+      }
+      if (!response.ok) return true;
+      const result = await response.json();
+      if (
+        result.device?.eventId !== currentDevice.eventId
+        || result.device?.color !== currentDevice.color
+      ) {
+        await clearRevokedDevice();
+        setStatus({
+          kind: "deny",
+          title: "SCANNER DEVICE MISMATCH",
+          detail: "The saved scanner does not match its server registration. Pair this device again.",
+        });
+        return false;
+      }
+      return true;
+    } catch {
+      return true;
+    }
+  }, [clearRevokedDevice]);
 
   const verifyCrossColor = useCallback(async (ticketId, currentDevice) => {
     if (!navigator.onLine) {
@@ -123,11 +231,24 @@ export default function ScannerPanel() {
     }
   }, []);
 
+  const handleCameraState = useCallback((cameraState, error) => {
+    if (cameraState === "error") {
+      setStatus({ kind: "deny", title: "CAMERA ERROR", detail: error || "Could not access the camera." });
+    } else if (cameraState === "ready") {
+      setStatus({ kind: "idle", title: "SCANNING", detail: "Camera active. Point it at a ticket QR code." });
+    }
+  }, []);
+
   const handleScan = useCallback(async (rawValue) => {
     const currentDevice = deviceRef.current;
     if (!currentDevice || scanLock.current) return;
     scanLock.current = true;
+    clearTimeout(scanLockTimeout.current);
+    clearTimeout(statusTimeout.current);
+    scanLockTimeout.current = setTimeout(() => { scanLock.current = false; }, 1200);
+    setStatus({ kind: "idle", title: "SCANNING", detail: "QR detected. Checking ticket…" });
     try {
+      if (!(await validateOnlineSession(currentDevice))) return;
       const ticketId = String(rawValue || "").trim();
       if (!TICKET_ID.test(ticketId)) {
         setStatus({ kind: "deny", title: "INVALID QR", detail: "The QR must contain only a valid ticket ID." });
@@ -154,9 +275,11 @@ export default function ScannerPanel() {
     } catch (error) {
       setStatus({ kind: "deny", title: "SCAN ERROR", detail: error.message });
     } finally {
-      setTimeout(() => { scanLock.current = false; }, 1200);
+      statusTimeout.current = setTimeout(() => {
+        setStatus({ kind: "idle", title: "READY TO SCAN", detail: "Point the camera at the next ticket QR code." });
+      }, 1200);
     }
-  }, [refreshPendingCount, verifyCrossColor]);
+  }, [refreshPendingCount, validateOnlineSession, verifyCrossColor]);
 
   const syncUsedTickets = async () => {
     if (!device || !navigator.onLine) {
@@ -178,10 +301,19 @@ export default function ScannerPanel() {
         body: JSON.stringify({ ticketIds: local.map((ticket) => ticket.id) }),
       });
       const result = await response.json();
+      if (response.status === 401) {
+        await clearRevokedDevice();
+        setStatus({
+          kind: "deny",
+          title: "SCANNER REVOKED",
+          detail: "This device is no longer authorized. Ask an administrator for a new pairing code.",
+        });
+        return;
+      }
       if (!response.ok) throw new Error(result.message || "Scan synchronization failed.");
       const unresolved = [];
       for (const item of result.results) {
-        if (item.status === "synced" || item.status === "already-used") {
+        if (item.status === "synced" || item.status === "already-synced") {
           const stored = await scannerStore.get("used", item.ticketId);
           await scannerStore.put("used", { ...stored, synced: true });
         } else {
@@ -207,6 +339,15 @@ export default function ScannerPanel() {
     try {
       await downloadHashset(device);
     } catch (error) {
+      if (error.status === 401) {
+        await clearRevokedDevice();
+        setStatus({
+          kind: "deny",
+          title: "SCANNER REVOKED",
+          detail: "This device is no longer authorized. Ask an administrator for a new pairing code.",
+        });
+        return;
+      }
       setStatus({ kind: "warn", title: "REFRESH FAILED", detail: error.message });
     }
   };
@@ -248,7 +389,7 @@ export default function ScannerPanel() {
               </span>
               <span className="text-sm text-gray-300">{pendingSync} scans pending sync</span>
             </div>
-            <div className="rounded-2xl bg-black p-2"><QrScanner onScan={handleScan} /></div>
+            <div className="rounded-2xl bg-black p-2"><QrScanner onScan={handleScan} onCameraState={handleCameraState} /></div>
             <div className={`mt-4 min-h-28 rounded-2xl p-5 text-center ${status.kind === "allow" ? "bg-green-800" : status.kind === "deny" ? "bg-red-800" : status.kind === "warn" ? "bg-amber-700" : "bg-[#1e1e30]"}`}>
               <h2 className="text-xl font-bold">{status.title}</h2>
               <p className="mt-2 text-sm">{status.detail}</p>
